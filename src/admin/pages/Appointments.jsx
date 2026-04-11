@@ -1,100 +1,87 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   Search,
-  Plus,
   Filter,
   Trash2,
-  Pencil,
   CheckCircle2,
   XCircle,
   Eye,
   MoreHorizontal,
 } from "lucide-react";
 
-const initialAppointments = [
-  {
-    id: 1,
-    date: "2026-04-12",
-    time: "09:00",
-    customer: "Anna Müller",
-    phone: "+49 176 11111111",
-    service: "Balayage Deluxe",
-    stylist: "Sophie",
-    status: "confirmed",
-    notes: "Erstbesuch",
-  },
-  {
-    id: 2,
-    date: "2026-04-12",
-    time: "10:30",
-    customer: "Julia Schneider",
-    phone: "+49 176 22222222",
-    service: "Damenhaarschnitt",
-    stylist: "Mila",
-    status: "pending",
-    notes: "",
-  },
-  {
-    id: 3,
-    date: "2026-04-12",
-    time: "14:00",
-    customer: "Daniel Weber",
-    phone: "+49 176 33333333",
-    service: "Herrenhaarschnitt",
-    stylist: "Emma",
-    status: "cancelled",
-    notes: "Vom Kunden storniert",
-  },
-  {
-    id: 4,
-    date: "2026-04-13",
-    time: "11:00",
-    customer: "Leonie Fischer",
-    phone: "+49 176 44444444",
-    service: "Color + Styling",
-    stylist: "Sophie",
-    status: "confirmed",
-    notes: "",
-  },
-];
-
-const emptyForm = {
-  date: "",
-  time: "",
-  customer: "",
-  phone: "",
-  service: "",
-  stylist: "",
-  status: "pending",
-  notes: "",
-};
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5005/api";
 
 export default function Appointments() {
-  const [appointments, setAppointments] = useState(initialAppointments);
+  const [appointments, setAppointments] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("");
   const [selectedAppointment, setSelectedAppointment] = useState(null);
-  const [showFormModal, setShowFormModal] = useState(false);
-  const [editingAppointment, setEditingAppointment] = useState(null);
-  const [formData, setFormData] = useState(emptyForm);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const todayKey = useMemo(() => {
     const today = new Date();
     return today.toISOString().split("T")[0];
   }, []);
 
+  useEffect(() => {
+    fetchAppointments();
+  }, []);
+
+  async function fetchAppointments() {
+    try {
+      setLoading(true);
+
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`${API_BASE}/appointments`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || "Termine konnten nicht geladen werden.",
+        );
+      }
+
+      setAppointments(data.data || []);
+    } catch (error) {
+      console.error("Appointments load error:", error);
+      alert(error.message || "Fehler beim Laden der Termine.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const normalizedAppointments = useMemo(() => {
+    return appointments.map((item) => ({
+      id: item._id || item.id,
+      date: item.date,
+      time: item.time,
+      customer: item.customerName || item.customer || "—",
+      phone: item.contact || item.phone || "—",
+      service: item.service?.name || item.serviceName || item.service || "—",
+      status: item.status || "pending",
+      notes: item.message || item.notes || "",
+      originalItem: item,
+    }));
+  }, [appointments]);
+
   const filteredAppointments = useMemo(() => {
-    return appointments.filter((item) => {
+    return normalizedAppointments.filter((item) => {
       const q = search.toLowerCase().trim();
 
       const matchesSearch =
         !q ||
         item.customer.toLowerCase().includes(q) ||
         item.service.toLowerCase().includes(q) ||
-        item.stylist.toLowerCase().includes(q) ||
         item.phone.toLowerCase().includes(q);
 
       const matchesStatus =
@@ -104,10 +91,12 @@ export default function Appointments() {
 
       return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [appointments, search, statusFilter, dateFilter]);
+  }, [normalizedAppointments, search, statusFilter, dateFilter]);
 
   const stats = useMemo(() => {
-    const todayAppointments = appointments.filter((a) => a.date === todayKey);
+    const todayAppointments = normalizedAppointments.filter(
+      (a) => a.date === todayKey,
+    );
 
     return {
       total: todayAppointments.length,
@@ -117,91 +106,79 @@ export default function Appointments() {
       cancelled: todayAppointments.filter((a) => a.status === "cancelled")
         .length,
     };
-  }, [appointments, todayKey]);
+  }, [normalizedAppointments, todayKey]);
 
-  const openCreateModal = () => {
-    setEditingAppointment(null);
-    setFormData(emptyForm);
-    setShowFormModal(true);
-  };
+  async function updateStatus(id, newStatus) {
+    try {
+      const token = localStorage.getItem("token");
 
-  const openEditModal = (appointment) => {
-    setEditingAppointment(appointment);
-    setFormData({
-      date: appointment.date,
-      time: appointment.time,
-      customer: appointment.customer,
-      phone: appointment.phone,
-      service: appointment.service,
-      stylist: appointment.stylist,
-      status: appointment.status,
-      notes: appointment.notes,
-    });
-    setShowFormModal(true);
-    setOpenMenuId(null);
-  };
+      const res = await fetch(`${API_BASE}/appointments/${id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
 
-  const handleSaveAppointment = (e) => {
-    e.preventDefault();
+      const data = await res.json();
 
-    if (
-      !formData.date ||
-      !formData.time ||
-      !formData.customer ||
-      !formData.service
-    ) {
-      alert("Bitte füllen Sie die Pflichtfelder aus.");
-      return;
-    }
+      if (!res.ok) {
+        throw new Error(
+          data.message || "Status konnte nicht aktualisiert werden.",
+        );
+      }
 
-    if (editingAppointment) {
       setAppointments((prev) =>
         prev.map((item) =>
-          item.id === editingAppointment.id ? { ...item, ...formData } : item,
+          (item._id || item.id) === id ? { ...item, status: newStatus } : item,
         ),
       );
-    } else {
-      setAppointments((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          ...formData,
-        },
-      ]);
+
+      setSelectedAppointment((prev) =>
+        prev && prev.id === id ? { ...prev, status: newStatus } : prev,
+      );
+
+      setOpenMenuId(null);
+    } catch (error) {
+      console.error("Update status error:", error);
+      alert(error.message || "Status konnte nicht aktualisiert werden.");
     }
+  }
 
-    setShowFormModal(false);
-    setEditingAppointment(null);
-    setFormData(emptyForm);
-  };
-
-  const handleDelete = (id) => {
+  async function handleDelete(id) {
     const confirmed = window.confirm(
       "Möchten Sie diesen Termin wirklich löschen?",
     );
     if (!confirmed) return;
 
-    setAppointments((prev) => prev.filter((item) => item.id !== id));
-    setOpenMenuId(null);
+    try {
+      const token = localStorage.getItem("token");
 
-    if (selectedAppointment?.id === id) {
-      setSelectedAppointment(null);
+      const res = await fetch(`${API_BASE}/appointments/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Termin konnte nicht gelöscht werden.");
+      }
+
+      setAppointments((prev) =>
+        prev.filter((item) => (item._id || item.id) !== id),
+      );
+
+      setSelectedAppointment((prev) => (prev?.id === id ? null : prev));
+      setOpenMenuId(null);
+    } catch (error) {
+      console.error("Delete appointment error:", error);
+      alert(error.message || "Termin konnte nicht gelöscht werden.");
     }
-  };
-
-  const updateStatus = (id, newStatus) => {
-    setAppointments((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, status: newStatus } : item,
-      ),
-    );
-
-    setSelectedAppointment((prev) =>
-      prev && prev.id === id ? { ...prev, status: newStatus } : prev,
-    );
-
-    setOpenMenuId(null);
-  };
+  }
 
   const clearFilters = () => {
     setSearch("");
@@ -223,14 +200,6 @@ export default function Appointments() {
               Verwalten, filtern und aktualisieren Sie alle Salontermine.
             </p>
           </div>
-
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#d8b46a] px-5 py-3 font-medium text-black transition hover:brightness-110"
-          >
-            <Plus size={18} />
-            Neuer Termin
-          </button>
         </div>
 
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -248,7 +217,7 @@ export default function Appointments() {
             />
             <input
               type="text"
-              placeholder="Suche nach Kunde, Leistung oder Stylist..."
+              placeholder="Suche nach Kunde, Leistung oder Telefon..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full rounded-2xl border border-white/10 bg-black/20 py-3 pl-11 pr-4 text-white outline-none focus:border-[#d8b46a]/60"
@@ -296,21 +265,24 @@ export default function Appointments() {
         </div>
 
         <div className="overflow-hidden rounded-3xl border border-[#6f4a24]/40 bg-gradient-to-br from-[#2a1714] to-[#11070f] shadow-[0_0_60px_rgba(216,180,106,0.08)]">
-          <div className="hidden md:grid grid-cols-[120px_90px_1.45fr_1.2fr_1fr_130px_190px] gap-4 border-b border-white/10 px-6 py-5 text-xs uppercase tracking-[0.28em] text-[#c8a96b]">
+          <div className="hidden md:grid grid-cols-[120px_90px_1.45fr_1.2fr_130px_190px] gap-4 border-b border-white/10 px-6 py-5 text-xs uppercase tracking-[0.28em] text-[#c8a96b]">
             <div>Datum</div>
             <div>Uhrzeit</div>
             <div>Kunde</div>
             <div>Leistung</div>
-            <div>Stylist</div>
             <div>Status</div>
             <div className="text-right">Aktionen</div>
           </div>
 
-          {filteredAppointments.length === 0 ? (
+          {loading ? (
+            <div className="px-6 py-16 text-center text-white/60">
+              Termine werden geladen...
+            </div>
+          ) : filteredAppointments.length === 0 ? (
             <div className="px-6 py-16 text-center">
               <p className="text-lg font-medium">Keine Termine gefunden</p>
               <p className="mt-2 text-sm text-white/55">
-                Passen Sie die Filter an oder erstellen Sie einen neuen Termin.
+                Passen Sie die Filter an oder warten Sie auf neue Buchungen.
               </p>
             </div>
           ) : (
@@ -319,7 +291,7 @@ export default function Appointments() {
                 {filteredAppointments.map((item) => (
                   <div
                     key={item.id}
-                    className="grid grid-cols-[120px_90px_1.45fr_1.2fr_1fr_130px_190px] items-center gap-4 border-b border-white/5 px-6 py-5 last:border-b-0"
+                    className="grid grid-cols-[120px_90px_1.45fr_1.2fr_130px_190px] items-center gap-4 border-b border-white/5 px-6 py-5 last:border-b-0"
                   >
                     <div>{formatDate(item.date)}</div>
                     <div>{item.time}</div>
@@ -334,7 +306,6 @@ export default function Appointments() {
                     </div>
 
                     <div className="truncate">{item.service}</div>
-                    <div className="truncate">{item.stylist}</div>
 
                     <div>
                       <StatusBadge status={item.status} />
@@ -345,12 +316,6 @@ export default function Appointments() {
                         onClick={() => setSelectedAppointment(item)}
                         icon={<Eye size={15} />}
                         label="Ansehen"
-                      />
-
-                      <ActionButton
-                        onClick={() => openEditModal(item)}
-                        icon={<Pencil size={15} />}
-                        label="Bearbeiten"
                       />
 
                       <div className="relative">
@@ -368,7 +333,7 @@ export default function Appointments() {
                         </button>
 
                         {openMenuId === item.id && (
-                          <div className="absolute right-0 top-11 z-20 w-48 rounded-2xl border border-white/10 bg-[#140911] p-2 shadow-2xl">
+                          <div className="absolute right-0 top-11 z-20 w-52 rounded-2xl border border-white/10 bg-[#140911] p-2 shadow-2xl">
                             <DropdownItem
                               onClick={() => updateStatus(item.id, "confirmed")}
                               label="Als bestätigt markieren"
@@ -426,10 +391,6 @@ export default function Appointments() {
                         <span className="text-white/45">Zeit:</span> {item.time}
                       </p>
                       <p>
-                        <span className="text-white/45">Stylist:</span>{" "}
-                        {item.stylist}
-                      </p>
-                      <p>
                         <span className="text-white/45">Telefon:</span>{" "}
                         {item.phone}
                       </p>
@@ -440,11 +401,6 @@ export default function Appointments() {
                         onClick={() => setSelectedAppointment(item)}
                         icon={<Eye size={15} />}
                         label="Ansehen"
-                      />
-                      <ActionButton
-                        onClick={() => openEditModal(item)}
-                        icon={<Pencil size={15} />}
-                        label="Bearbeiten"
                       />
                       <ActionButton
                         onClick={() => updateStatus(item.id, "confirmed")}
@@ -473,14 +429,16 @@ export default function Appointments() {
         >
           <div className="space-y-3 text-sm text-white/80">
             <DetailRow label="Kunde" value={selectedAppointment.customer} />
-            <DetailRow label="Telefon" value={selectedAppointment.phone} />
+            <DetailRow
+              label="Telefon / E-Mail"
+              value={selectedAppointment.phone}
+            />
             <DetailRow
               label="Datum"
               value={formatDate(selectedAppointment.date)}
             />
             <DetailRow label="Uhrzeit" value={selectedAppointment.time} />
             <DetailRow label="Leistung" value={selectedAppointment.service} />
-            <DetailRow label="Stylist" value={selectedAppointment.stylist} />
             <DetailRow
               label="Status"
               value={<StatusBadge status={selectedAppointment.status} />}
@@ -511,108 +469,6 @@ export default function Appointments() {
               Stornieren
             </button>
           </div>
-        </Modal>
-      )}
-
-      {showFormModal && (
-        <Modal
-          onClose={() => {
-            setShowFormModal(false);
-            setEditingAppointment(null);
-          }}
-          title={
-            editingAppointment ? "Termin bearbeiten" : "Neuen Termin erstellen"
-          }
-        >
-          <form onSubmit={handleSaveAppointment} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <InputField
-                label="Datum"
-                type="date"
-                value={formData.date}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, date: e.target.value }))
-                }
-              />
-              <InputField
-                label="Uhrzeit"
-                type="time"
-                value={formData.time}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, time: e.target.value }))
-                }
-              />
-              <InputField
-                label="Kunde"
-                value={formData.customer}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, customer: e.target.value }))
-                }
-              />
-              <InputField
-                label="Telefon"
-                value={formData.phone}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, phone: e.target.value }))
-                }
-              />
-              <InputField
-                label="Leistung"
-                value={formData.service}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, service: e.target.value }))
-                }
-              />
-              <InputField
-                label="Stylist"
-                value={formData.stylist}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, stylist: e.target.value }))
-                }
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm text-white/70">Status</label>
-              <select
-                value={formData.status}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, status: e.target.value }))
-                }
-                className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-[#d8b46a]/60"
-              >
-                <option value="pending">Offen</option>
-                <option value="confirmed">Bestätigt</option>
-                <option value="cancelled">Storniert</option>
-                <option value="completed">Abgeschlossen</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm text-white/70">
-                Notizen
-              </label>
-              <textarea
-                rows={4}
-                value={formData.notes}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, notes: e.target.value }))
-                }
-                className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-[#d8b46a]/60"
-              />
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                className="rounded-2xl bg-[#d8b46a] px-5 py-3 font-medium text-black transition hover:brightness-110"
-              >
-                {editingAppointment
-                  ? "Änderungen speichern"
-                  : "Termin erstellen"}
-              </button>
-            </div>
-          </form>
         </Modal>
       )}
     </div>
@@ -648,7 +504,7 @@ function StatusBadge({ status }) {
     <span
       className={`inline-flex w-fit whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium ${styles[status]}`}
     >
-      {labels[status]}
+      {labels[status] || status}
     </span>
   );
 }
@@ -683,18 +539,6 @@ function DropdownItem({ label, onClick, danger = false }) {
     >
       {label}
     </button>
-  );
-}
-
-function InputField({ label, ...props }) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm text-white/70">{label}</label>
-      <input
-        {...props}
-        className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-[#d8b46a]/60"
-      />
-    </div>
   );
 }
 

@@ -1,52 +1,73 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { format } from "date-fns";
 
-const servicePrices = {
-  "Signature Damenhaarschnitt": 79,
-  "Executive Herrenhaarschnitt": 49,
-  "Farbe & Balayage Deluxe": 189,
-  "Braut- & Eventstyling": 249,
-};
-
-const demoCoupons = [
-  {
-    code: "WELCOME10",
-    type: "percentage",
-    value: 10,
-    minAmount: 30,
-    isActive: true,
-  },
-  {
-    code: "VIP15",
-    type: "fixed",
-    value: 15,
-    minAmount: 80,
-    isActive: true,
-  },
-  {
-    code: "COLOR20",
-    type: "fixed",
-    value: 20,
-    minAmount: 150,
-    isActive: true,
-    service: "Farbe & Balayage Deluxe",
-  },
-];
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5005/api";
 
 export default function BookingForm() {
   const [selectedDate, setSelectedDate] = useState();
+  const [services, setServices] = useState([]);
+  const [coupons, setCoupons] = useState([]);
+  const [loadingServices, setLoadingServices] = useState(true);
+  const [loadingCoupons, setLoadingCoupons] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
   const [form, setForm] = useState({
     name: "",
     contact: "",
-    service: "",
+    serviceId: "",
     time: "",
     message: "",
     couponCode: "",
   });
+
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponMessage, setCouponMessage] = useState("");
+  console.log("API_BASE:", import.meta.env.VITE_API_BASE_URL);
+  useEffect(() => {
+    async function fetchServices() {
+      try {
+        const res = await fetch(`${API_BASE}/services`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(
+            data.message || "Leistungen konnten nicht geladen werden.",
+          );
+        }
+
+        setServices(data.data || []);
+      } catch (error) {
+        console.error("Services load error:", error);
+      } finally {
+        setLoadingServices(false);
+      }
+    }
+
+    async function fetchCoupons() {
+      try {
+        const res = await fetch(`${API_BASE}/coupons`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(
+            data.message || "Gutscheine konnten nicht geladen werden.",
+          );
+        }
+
+        setCoupons(data.data || []);
+      } catch (error) {
+        console.error("Coupons load error:", error);
+      } finally {
+        setLoadingCoupons(false);
+      }
+    }
+
+    fetchServices();
+    fetchCoupons();
+  }, []);
 
   const bookedDates = useMemo(
     () => [
@@ -100,7 +121,15 @@ export default function BookingForm() {
     (slot) => !unavailableSlots.includes(slot),
   );
 
-  const servicePrice = form.service ? servicePrices[form.service] || 0 : 0;
+  const selectedService = useMemo(() => {
+    return (
+      services.find(
+        (service) => (service._id || service.id) === form.serviceId,
+      ) || null
+    );
+  }, [services, form.serviceId]);
+
+  const servicePrice = selectedService?.price || 0;
 
   const discountAmount = useMemo(() => {
     if (!appliedCoupon || !servicePrice) return 0;
@@ -123,9 +152,10 @@ export default function BookingForm() {
 
     setForm((prev) => ({ ...prev, [name]: value }));
 
-    if (name === "service") {
+    if (name === "serviceId") {
       setAppliedCoupon(null);
       setCouponMessage("");
+      setForm((prev) => ({ ...prev, serviceId: value, couponCode: "" }));
     }
 
     if (name === "couponCode") {
@@ -146,15 +176,14 @@ export default function BookingForm() {
       return;
     }
 
-    if (!form.service) {
+    if (!selectedService) {
       setAppliedCoupon(null);
       setCouponMessage("Bitte wählen Sie zuerst eine Leistung aus.");
       return;
     }
 
     const code = form.couponCode.trim().toUpperCase();
-
-    const foundCoupon = demoCoupons.find((coupon) => coupon.code === code);
+    const foundCoupon = coupons.find((coupon) => coupon.code === code);
 
     if (!foundCoupon) {
       setAppliedCoupon(null);
@@ -168,7 +197,7 @@ export default function BookingForm() {
       return;
     }
 
-    if (servicePrice < foundCoupon.minAmount) {
+    if (servicePrice < (foundCoupon.minAmount || 0)) {
       setAppliedCoupon(null);
       setCouponMessage(
         `Dieser Gutschein gilt erst ab ${foundCoupon.minAmount} €.`,
@@ -176,11 +205,12 @@ export default function BookingForm() {
       return;
     }
 
-    if (foundCoupon.service && foundCoupon.service !== form.service) {
+    if (
+      foundCoupon.appliesToService &&
+      foundCoupon.appliesToService._id !== selectedService._id
+    ) {
       setAppliedCoupon(null);
-      setCouponMessage(
-        `Dieser Gutschein gilt nur für: ${foundCoupon.service}.`,
-      );
+      setCouponMessage(`Dieser Gutschein gilt nicht für diese Leistung.`);
       return;
     }
 
@@ -196,7 +226,7 @@ export default function BookingForm() {
     setForm((prev) => ({ ...prev, couponCode: "" }));
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
 
     if (!selectedDate) {
@@ -209,17 +239,61 @@ export default function BookingForm() {
       return;
     }
 
+    if (!form.serviceId) {
+      alert("Bitte wählen Sie eine Leistung aus.");
+      return;
+    }
+
     const payload = {
-      ...form,
-      coupon: appliedCoupon ? appliedCoupon.code : null,
-      originalPrice: servicePrice,
-      discount: discountAmount,
-      totalPrice: finalPrice,
-      date: format(selectedDate, "dd.MM.yyyy"),
+      name: form.name,
+      contact: form.contact,
+      serviceId: form.serviceId,
+      date: format(selectedDate, "yyyy-MM-dd"),
+      time: form.time,
+      message: form.message,
+      couponCode: appliedCoupon ? appliedCoupon.code : "",
     };
 
-    console.log("Demo-Terminanfrage:", payload);
-    alert("Demo: Ihre Terminanfrage wurde erfolgreich gesendet.");
+    try {
+      setSubmitting(true);
+
+      const res = await fetch(`${API_BASE}/appointments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || "Terminanfrage konnte nicht gesendet werden.",
+        );
+      }
+
+      console.log("Appointment created:", data);
+
+      alert("Ihre Terminanfrage wurde erfolgreich gesendet.");
+
+      setForm({
+        name: "",
+        contact: "",
+        serviceId: "",
+        time: "",
+        message: "",
+        couponCode: "",
+      });
+      setSelectedDate(undefined);
+      setAppliedCoupon(null);
+      setCouponMessage("");
+    } catch (error) {
+      console.error("Appointment submit error:", error);
+      alert(error.message || "Ein Fehler ist aufgetreten.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -345,38 +419,47 @@ export default function BookingForm() {
 
             <select
               className="h-12 rounded-2xl border border-[#c8ae72]/18 bg-[rgba(255,255,255,0.03)] px-4 text-[#fff5df] outline-none"
-              name="service"
-              value={form.service}
+              name="serviceId"
+              value={form.serviceId}
               onChange={handleChange}
               required
+              disabled={loadingServices}
             >
               <option value="" className="text-black">
-                Bitte Leistung auswählen
+                {loadingServices
+                  ? "Leistungen werden geladen..."
+                  : "Bitte Leistung auswählen"}
               </option>
-              <option value="Signature Damenhaarschnitt" className="text-black">
-                Signature Damenhaarschnitt
-              </option>
-              <option
-                value="Executive Herrenhaarschnitt"
-                className="text-black"
-              >
-                Executive Herrenhaarschnitt
-              </option>
-              <option value="Farbe & Balayage Deluxe" className="text-black">
-                Farbe & Balayage Deluxe
-              </option>
-              <option value="Braut- & Eventstyling" className="text-black">
-                Braut- & Eventstyling
-              </option>
+
+              {services.map((service) => {
+                const serviceId = service._id || service.id;
+
+                return (
+                  <option
+                    key={serviceId}
+                    value={serviceId}
+                    className="text-black"
+                  >
+                    {service.name}
+                  </option>
+                );
+              })}
             </select>
 
-            {form.service ? (
+            {selectedService ? (
               <div className="rounded-2xl border border-[#c8ae72]/15 bg-[rgba(255,255,255,0.03)] p-4">
                 <p className="text-sm uppercase tracking-[0.2em] text-[#c8ae72]">
                   Gewählte Leistung
                 </p>
                 <div className="mt-3 flex items-center justify-between gap-4">
-                  <span className="text-[#fff2d2]">{form.service}</span>
+                  <div>
+                    <span className="block text-[#fff2d2]">
+                      {selectedService.name}
+                    </span>
+                    <span className="text-xs text-[#c9bba5]">
+                      {selectedService.durationMinutes} Minuten
+                    </span>
+                  </div>
                   <span className="text-lg font-semibold text-[#f1ddb0]">
                     {servicePrice.toFixed(2)} €
                   </span>
@@ -391,12 +474,14 @@ export default function BookingForm() {
                 placeholder="Gutscheincode eingeben"
                 value={form.couponCode}
                 onChange={handleChange}
+                disabled={loadingCoupons}
               />
 
               <button
                 type="button"
                 onClick={handleApplyCoupon}
                 className="h-12 rounded-2xl border border-[#c8ae72]/20 bg-[#c8ae72]/10 px-5 font-medium text-[#f1ddb0] transition hover:bg-[#c8ae72]/20"
+                disabled={loadingCoupons}
               >
                 Einlösen
               </button>
@@ -520,9 +605,10 @@ export default function BookingForm() {
 
             <button
               type="submit"
-              className="mt-2 h-12 rounded-2xl bg-gradient-to-r from-[#f1ddb0] via-[#d7ba77] to-[#b6934f] font-medium text-[#23170d] shadow-[0_10px_30px_rgba(183,147,79,0.3)] transition hover:brightness-110"
+              disabled={submitting}
+              className="mt-2 h-12 rounded-2xl bg-gradient-to-r from-[#f1ddb0] via-[#d7ba77] to-[#b6934f] font-medium text-[#23170d] shadow-[0_10px_30px_rgba(183,147,79,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              Terminanfrage senden
+              {submitting ? "Wird gesendet..." : "Terminanfrage senden"}
             </button>
           </div>
         </form>

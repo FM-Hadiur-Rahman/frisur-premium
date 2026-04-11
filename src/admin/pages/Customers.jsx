@@ -1,77 +1,112 @@
-import { useMemo, useState } from "react";
-import {
-  Search,
-  Plus,
-  Phone,
-  User,
-  Eye,
-  Pencil,
-  Trash2,
-  XCircle,
-  CalendarDays,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Search, Phone, Eye, XCircle } from "lucide-react";
 
-const initialCustomers = [
-  {
-    id: 1,
-    name: "Anna Müller",
-    phone: "+49 176 111111",
-    email: "anna.mueller@email.de",
-    visits: 5,
-    lastVisit: "2026-04-10",
-    favoriteService: "Balayage Deluxe",
-    notes: "Bevorzugt warme Farbtöne.",
-  },
-  {
-    id: 2,
-    name: "Julia Schneider",
-    phone: "+49 176 222222",
-    email: "julia.schneider@email.de",
-    visits: 2,
-    lastVisit: "2026-04-08",
-    favoriteService: "Damenhaarschnitt",
-    notes: "",
-  },
-  {
-    id: 3,
-    name: "Daniel Weber",
-    phone: "+49 176 333333",
-    email: "daniel.weber@email.de",
-    visits: 7,
-    lastVisit: "2026-04-11",
-    favoriteService: "Herrenhaarschnitt",
-    notes: "Kommt oft freitags.",
-  },
-  {
-    id: 4,
-    name: "Leonie Fischer",
-    phone: "+49 176 444444",
-    email: "leonie.fischer@email.de",
-    visits: 1,
-    lastVisit: "2026-04-05",
-    favoriteService: "Color + Styling",
-    notes: "",
-  },
-];
-
-const emptyForm = {
-  name: "",
-  phone: "",
-  email: "",
-  visits: 0,
-  lastVisit: "",
-  favoriteService: "",
-  notes: "",
-};
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5005/api";
 
 export default function Customers() {
-  const [customers, setCustomers] = useState(initialCustomers);
+  const [appointments, setAppointments] = useState([]);
   const [search, setSearch] = useState("");
   const [visitFilter, setVisitFilter] = useState("all");
   const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [showFormModal, setShowFormModal] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState(null);
-  const [formData, setFormData] = useState(emptyForm);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchCustomersFromAppointments();
+  }, []);
+
+  async function fetchCustomersFromAppointments() {
+    try {
+      setLoading(true);
+
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`${API_BASE}/appointments`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || "Kundendaten konnten nicht geladen werden.",
+        );
+      }
+
+      setAppointments(data.data || []);
+    } catch (error) {
+      console.error("Customers load error:", error);
+      alert(error.message || "Fehler beim Laden der Kundendaten.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const customers = useMemo(() => {
+    const grouped = new Map();
+
+    appointments.forEach((appointment) => {
+      const name =
+        appointment.customerName || appointment.customer || "Unbekannt";
+      const contact = appointment.contact || appointment.phone || "";
+      const serviceName =
+        appointment.service?.name ||
+        appointment.serviceName ||
+        appointment.service ||
+        "—";
+      const date = appointment.date || "";
+      const notes = appointment.message || appointment.notes || "";
+
+      const key = contact || name.toLowerCase();
+
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          id: key,
+          name,
+          phone: contact,
+          email: contact.includes("@") ? contact : "",
+          visits: 1,
+          lastVisit: date,
+          services: [serviceName],
+          notes: notes ? [notes] : [],
+        });
+      } else {
+        const existing = grouped.get(key);
+        existing.visits += 1;
+        existing.services.push(serviceName);
+
+        if (notes) {
+          existing.notes.push(notes);
+        }
+
+        if (
+          date &&
+          (!existing.lastVisit || new Date(date) > new Date(existing.lastVisit))
+        ) {
+          existing.lastVisit = date;
+        }
+      }
+    });
+
+    return Array.from(grouped.values()).map((customer) => {
+      const serviceCounts = customer.services.reduce((acc, service) => {
+        acc[service] = (acc[service] || 0) + 1;
+        return acc;
+      }, {});
+
+      const favoriteService =
+        Object.entries(serviceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ||
+        "—";
+
+      return {
+        ...customer,
+        favoriteService,
+        notes: customer.notes.filter(Boolean).join(" | "),
+      };
+    });
+  }, [appointments]);
 
   const filteredCustomers = useMemo(() => {
     return customers.filter((customer) => {
@@ -104,75 +139,6 @@ export default function Customers() {
     };
   }, [customers]);
 
-  const openCreateModal = () => {
-    setEditingCustomer(null);
-    setFormData(emptyForm);
-    setShowFormModal(true);
-  };
-
-  const openEditModal = (customer) => {
-    setEditingCustomer(customer);
-    setFormData({
-      name: customer.name,
-      phone: customer.phone,
-      email: customer.email,
-      visits: customer.visits,
-      lastVisit: customer.lastVisit,
-      favoriteService: customer.favoriteService,
-      notes: customer.notes,
-    });
-    setShowFormModal(true);
-  };
-
-  const handleSaveCustomer = (e) => {
-    e.preventDefault();
-
-    if (!formData.name || !formData.phone) {
-      alert("Bitte Name und Telefonnummer ausfüllen.");
-      return;
-    }
-
-    if (editingCustomer) {
-      setCustomers((prev) =>
-        prev.map((customer) =>
-          customer.id === editingCustomer.id
-            ? {
-                ...customer,
-                ...formData,
-                visits: Number(formData.visits) || 0,
-              }
-            : customer,
-        ),
-      );
-    } else {
-      setCustomers((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          ...formData,
-          visits: Number(formData.visits) || 0,
-        },
-      ]);
-    }
-
-    setShowFormModal(false);
-    setEditingCustomer(null);
-    setFormData(emptyForm);
-  };
-
-  const handleDeleteCustomer = (id) => {
-    const confirmed = window.confirm(
-      "Möchten Sie diesen Kunden wirklich löschen?",
-    );
-    if (!confirmed) return;
-
-    setCustomers((prev) => prev.filter((customer) => customer.id !== id));
-
-    if (selectedCustomer?.id === id) {
-      setSelectedCustomer(null);
-    }
-  };
-
   const clearFilters = () => {
     setSearch("");
     setVisitFilter("all");
@@ -189,18 +155,10 @@ export default function Customers() {
           <div>
             <h1 className="text-4xl font-semibold">Kundenübersicht</h1>
             <p className="mt-2 text-sm text-white/60">
-              Übersicht aller Kundinnen und Kunden mit Kontaktdaten und
-              bisherigen Besuchen.
+              Übersicht aller Kundinnen und Kunden basierend auf echten
+              Buchungen.
             </p>
           </div>
-
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#d8b46a] px-5 py-3 font-medium text-black transition hover:brightness-110"
-          >
-            <Plus size={18} />
-            Neuer Kunde
-          </button>
         </div>
 
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -245,11 +203,15 @@ export default function Customers() {
           </button>
         </div>
 
-        {filteredCustomers.length === 0 ? (
+        {loading ? (
+          <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-16 text-center text-white/60">
+            Kundendaten werden geladen...
+          </div>
+        ) : filteredCustomers.length === 0 ? (
           <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-16 text-center">
             <p className="text-lg font-medium">Keine Kunden gefunden</p>
             <p className="mt-2 text-sm text-white/55">
-              Passen Sie die Suche an oder legen Sie einen neuen Kunden an.
+              Passen Sie die Suche an oder warten Sie auf neue Buchungen.
             </p>
           </div>
         ) : (
@@ -266,7 +228,7 @@ export default function Customers() {
                     </h3>
                     <div className="mt-2 flex items-center gap-2 text-sm text-white/65">
                       <Phone size={15} />
-                      <span className="truncate">{customer.phone}</span>
+                      <span className="truncate">{customer.phone || "—"}</span>
                     </div>
                   </div>
 
@@ -296,17 +258,6 @@ export default function Customers() {
                     icon={<Eye size={15} />}
                     label="Ansehen"
                   />
-                  <ActionButton
-                    onClick={() => openEditModal(customer)}
-                    icon={<Pencil size={15} />}
-                    label="Bearbeiten"
-                  />
-                  <ActionButton
-                    danger
-                    onClick={() => handleDeleteCustomer(customer.id)}
-                    icon={<Trash2 size={15} />}
-                    label="Löschen"
-                  />
                 </div>
               </div>
             ))}
@@ -318,7 +269,10 @@ export default function Customers() {
         <Modal onClose={() => setSelectedCustomer(null)} title="Kundendetails">
           <div className="space-y-3 text-sm text-white/80">
             <DetailRow label="Name" value={selectedCustomer.name} />
-            <DetailRow label="Telefon" value={selectedCustomer.phone} />
+            <DetailRow
+              label="Telefon / Kontakt"
+              value={selectedCustomer.phone || "—"}
+            />
             <DetailRow label="E-Mail" value={selectedCustomer.email || "—"} />
             <DetailRow label="Besuche" value={selectedCustomer.visits} />
             <DetailRow
@@ -335,110 +289,6 @@ export default function Customers() {
             />
             <DetailRow label="Notizen" value={selectedCustomer.notes || "—"} />
           </div>
-
-          <div className="mt-6 flex flex-wrap gap-2">
-            <button
-              onClick={() => {
-                setSelectedCustomer(null);
-                openEditModal(selectedCustomer);
-              }}
-              className="rounded-xl bg-[#d8b46a]/20 px-4 py-2 text-sm text-[#f1d79b]"
-            >
-              Bearbeiten
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {showFormModal && (
-        <Modal
-          onClose={() => {
-            setShowFormModal(false);
-            setEditingCustomer(null);
-          }}
-          title={
-            editingCustomer ? "Kunde bearbeiten" : "Neuen Kunden erstellen"
-          }
-        >
-          <form onSubmit={handleSaveCustomer} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <InputField
-                label="Name"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, name: e.target.value }))
-                }
-              />
-              <InputField
-                label="Telefon"
-                value={formData.phone}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, phone: e.target.value }))
-                }
-              />
-              <InputField
-                label="E-Mail"
-                type="email"
-                value={formData.email}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, email: e.target.value }))
-                }
-              />
-              <InputField
-                label="Besuche"
-                type="number"
-                min="0"
-                value={formData.visits}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, visits: e.target.value }))
-                }
-              />
-              <InputField
-                label="Letzter Besuch"
-                type="date"
-                value={formData.lastVisit}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    lastVisit: e.target.value,
-                  }))
-                }
-              />
-              <InputField
-                label="Lieblingsservice"
-                value={formData.favoriteService}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    favoriteService: e.target.value,
-                  }))
-                }
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm text-white/70">
-                Notizen
-              </label>
-              <textarea
-                rows={4}
-                value={formData.notes}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, notes: e.target.value }))
-                }
-                className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-[#d8b46a]/60"
-              />
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                className="rounded-2xl bg-[#d8b46a] px-5 py-3 font-medium text-black transition hover:brightness-110"
-              >
-                {editingCustomer ? "Änderungen speichern" : "Kunde erstellen"}
-              </button>
-            </div>
-          </form>
         </Modal>
       )}
     </div>
@@ -468,18 +318,6 @@ function ActionButton({ icon, label, onClick, danger = false }) {
       {icon}
       <span>{label}</span>
     </button>
-  );
-}
-
-function InputField({ label, ...props }) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm text-white/70">{label}</label>
-      <input
-        {...props}
-        className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-[#d8b46a]/60"
-      />
-    </div>
   );
 }
 

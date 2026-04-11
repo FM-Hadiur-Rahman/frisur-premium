@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   CalendarDays,
@@ -11,116 +12,165 @@ import {
   Plus,
 } from "lucide-react";
 
-const stats = [
-  {
-    title: "Heutige Termine",
-    value: "12",
-    description: "Geplante Buchungen für den heutigen Tag.",
-    icon: CalendarDays,
-  },
-  {
-    title: "Neue Kunden",
-    value: "28",
-    description: "Neue Anfragen im aktuellen Monat.",
-    icon: Users,
-  },
-  {
-    title: "Leistungen",
-    value: "14",
-    description: "Aktive Dienstleistungen im Salon-System.",
-    icon: Scissors,
-  },
-  {
-    title: "Umsatz Vorschau",
-    value: "4.820 €",
-    description: "Geschätzter Monatsumsatz auf Basis der Demo-Daten.",
-    icon: Euro,
-  },
-];
-
-const todayAppointments = [
-  {
-    id: 1,
-    time: "09:00",
-    customer: "Anna Müller",
-    service: "Balayage Deluxe",
-    status: "Bestätigt",
-  },
-  {
-    id: 2,
-    time: "10:30",
-    customer: "Julia Schneider",
-    service: "Damenhaarschnitt",
-    status: "Bestätigt",
-  },
-  {
-    id: 3,
-    time: "12:00",
-    customer: "Daniel Weber",
-    service: "Herrenhaarschnitt",
-    status: "Bestätigt",
-  },
-  {
-    id: 4,
-    time: "14:00",
-    customer: "Selin Kaya",
-    service: "Braut- & Eventstyling",
-    status: "Bestätigt",
-  },
-];
-
-const recentCustomers = [
-  {
-    id: 1,
-    name: "Anna Müller",
-    visits: 5,
-    phone: "+49 176 111111",
-  },
-  {
-    id: 2,
-    name: "Julia Schneider",
-    visits: 2,
-    phone: "+49 176 222222",
-  },
-  {
-    id: 3,
-    name: "Daniel Weber",
-    visits: 7,
-    phone: "+49 176 333333",
-  },
-];
-
-const topServices = [
-  { id: 1, name: "Balayage Deluxe", bookings: 18 },
-  { id: 2, name: "Damenhaarschnitt", bookings: 26 },
-  { id: 3, name: "Color + Styling", bookings: 14 },
-  { id: 4, name: "Brautstyling", bookings: 8 },
-];
-
-const quickActions = [
-  {
-    label: "Neuen Termin hinzufügen",
-    to: "/admin/appointments",
-    icon: Plus,
-  },
-  {
-    label: "Leistungen bearbeiten",
-    to: "/admin/services",
-    icon: Scissors,
-  },
-  {
-    label: "Kundenübersicht öffnen",
-    to: "/admin/customers",
-    icon: Users,
-  },
-  {
-    label: "Salon-Einstellungen aktualisieren",
-    to: "/admin/settings",
-    icon: Settings,
-  },
-];
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5005/api";
 
 export default function Dashboard() {
+  const [appointments, setAppointments] = useState([]);
+  const [services, setServices] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchDashboardData() {
+      try {
+        const token = localStorage.getItem("token");
+
+        const appointmentRes = await fetch(`${API_BASE}/appointments`, {
+          headers: token
+            ? {
+                Authorization: `Bearer ${token}`,
+              }
+            : {},
+        });
+
+        const appointmentData = await appointmentRes.json();
+
+        if (!appointmentRes.ok) {
+          throw new Error(
+            appointmentData.message || "Termine konnten nicht geladen werden.",
+          );
+        }
+
+        const serviceRes = await fetch(`${API_BASE}/services`);
+        const serviceData = await serviceRes.json();
+
+        if (!serviceRes.ok) {
+          throw new Error(
+            serviceData.message || "Leistungen konnten nicht geladen werden.",
+          );
+        }
+
+        setAppointments(appointmentData.data || []);
+        setServices(serviceData.data || []);
+      } catch (error) {
+        console.error("Dashboard load error:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchDashboardData();
+  }, []);
+
+  const todayString = new Date().toISOString().split("T")[0];
+
+  const todaysAppointments = useMemo(() => {
+    return appointments.filter(
+      (appointment) => appointment.date === todayString,
+    );
+  }, [appointments, todayString]);
+
+  const recentAppointments = useMemo(() => {
+    return [...appointments].slice(0, 4);
+  }, [appointments]);
+
+  const customerMap = useMemo(() => {
+    const map = new Map();
+
+    appointments.forEach((appointment) => {
+      const key = appointment.contact || appointment.customerName;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          id: key,
+          name: appointment.customerName,
+          phone: appointment.contact,
+          visits: 1,
+        });
+      } else {
+        map.get(key).visits += 1;
+      }
+    });
+
+    return Array.from(map.values()).slice(0, 3);
+  }, [appointments]);
+
+  const topServices = useMemo(() => {
+    const counts = {};
+
+    appointments.forEach((appointment) => {
+      const serviceName =
+        appointment.service?.name || appointment.serviceName || "Unbekannt";
+      counts[serviceName] = (counts[serviceName] || 0) + 1;
+    });
+
+    return Object.entries(counts)
+      .map(([name, bookings], index) => ({
+        id: index + 1,
+        name,
+        bookings,
+      }))
+      .sort((a, b) => b.bookings - a.bookings)
+      .slice(0, 4);
+  }, [appointments]);
+
+  const totalRevenue = useMemo(() => {
+    return appointments.reduce(
+      (sum, appointment) => sum + Number(appointment.finalPrice || 0),
+      0,
+    );
+  }, [appointments]);
+
+  const stats = [
+    {
+      title: "Heutige Termine",
+      value: todaysAppointments.length,
+      description: "Geplante Buchungen für den heutigen Tag.",
+      icon: CalendarDays,
+    },
+    {
+      title: "Neue Kunden",
+      value: customerMap.length,
+      description: "Kundinnen und Kunden aus aktuellen Anfragen.",
+      icon: Users,
+    },
+    {
+      title: "Leistungen",
+      value: services.length,
+      description: "Aktive Dienstleistungen im Salon-System.",
+      icon: Scissors,
+    },
+    {
+      title: "Umsatz Vorschau",
+      value: `${totalRevenue.toFixed(2)} €`,
+      description: "Berechnet auf Basis eingegangener Anfragen.",
+      icon: Euro,
+    },
+  ];
+
+  const quickActions = [
+    {
+      label: "Neuen Termin hinzufügen",
+      to: "/admin/appointments",
+      icon: Plus,
+    },
+    {
+      label: "Leistungen bearbeiten",
+      to: "/admin/services",
+      icon: Scissors,
+    },
+    {
+      label: "Kundenübersicht öffnen",
+      to: "/admin/customers",
+      icon: Users,
+    },
+    {
+      label: "Salon-Einstellungen aktualisieren",
+      to: "/admin/settings",
+      icon: Settings,
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-[#08030a] px-6 pt-10 pb-8 text-white">
       <div className="mx-auto max-w-7xl">
@@ -159,12 +209,30 @@ export default function Dashboard() {
               }
             >
               <div className="space-y-4">
-                {todayAppointments.map((appointment) => (
-                  <AppointmentRow
-                    key={appointment.id}
-                    appointment={appointment}
-                  />
-                ))}
+                {loading ? (
+                  <p className="text-sm text-white/60">
+                    Termine werden geladen...
+                  </p>
+                ) : recentAppointments.length > 0 ? (
+                  recentAppointments.map((appointment) => (
+                    <AppointmentRow
+                      key={appointment._id || appointment.id}
+                      appointment={{
+                        time: appointment.time,
+                        customer: appointment.customerName,
+                        service:
+                          appointment.service?.name ||
+                          appointment.serviceName ||
+                          "Unbekannt",
+                        status: formatStatus(appointment.status),
+                      }}
+                    />
+                  ))
+                ) : (
+                  <p className="text-sm text-white/60">
+                    Noch keine Buchungen vorhanden.
+                  </p>
+                )}
               </div>
             </SectionCard>
 
@@ -182,23 +250,31 @@ export default function Dashboard() {
                 }
               >
                 <div className="space-y-3">
-                  {recentCustomers.map((customer) => (
-                    <div
-                      key={customer.id}
-                      className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-4"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{customer.name}</p>
-                        <p className="truncate text-sm text-white/45">
-                          {customer.phone}
-                        </p>
-                      </div>
+                  {customerMap.length > 0 ? (
+                    customerMap.map((customer) => (
+                      <div
+                        key={customer.id}
+                        className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-4"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {customer.name}
+                          </p>
+                          <p className="truncate text-sm text-white/45">
+                            {customer.phone}
+                          </p>
+                        </div>
 
-                      <div className="rounded-full border border-[#d8b46a]/20 bg-[#d8b46a]/10 px-3 py-1 text-xs text-[#e7c98a]">
-                        {customer.visits} Besuche
+                        <div className="rounded-full border border-[#d8b46a]/20 bg-[#d8b46a]/10 px-3 py-1 text-xs text-[#e7c98a]">
+                          {customer.visits} Besuche
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <p className="text-sm text-white/60">
+                      Noch keine Kundendaten vorhanden.
+                    </p>
+                  )}
                 </div>
               </SectionCard>
 
@@ -215,24 +291,30 @@ export default function Dashboard() {
                 }
               >
                 <div className="space-y-3">
-                  {topServices.map((service) => (
-                    <div
-                      key={service.id}
-                      className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-4"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{service.name}</p>
-                        <p className="text-sm text-white/45">
-                          Beliebte Leistung
-                        </p>
-                      </div>
+                  {topServices.length > 0 ? (
+                    topServices.map((service) => (
+                      <div
+                        key={service.id}
+                        className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-4"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{service.name}</p>
+                          <p className="text-sm text-white/45">
+                            Beliebte Leistung
+                          </p>
+                        </div>
 
-                      <div className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300">
-                        <Star size={13} />
-                        {service.bookings} Buchungen
+                        <div className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300">
+                          <Star size={13} />
+                          {service.bookings} Buchungen
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <p className="text-sm text-white/60">
+                      Noch keine Leistungsdaten vorhanden.
+                    </p>
+                  )}
                 </div>
               </SectionCard>
             </div>
@@ -274,26 +356,28 @@ export default function Dashboard() {
                 <MiniStatusCard
                   icon={Clock3}
                   label="Nächster Termin"
-                  value="09:00 Uhr"
-                  subtext="Anna Müller"
+                  value={recentAppointments[0]?.time || "—"}
+                  subtext={
+                    recentAppointments[0]?.customerName || "Noch kein Termin"
+                  }
                 />
                 <MiniStatusCard
                   icon={Users}
                   label="Kunden heute"
-                  value="12"
-                  subtext="inkl. 3 Neukunden"
+                  value={todaysAppointments.length}
+                  subtext="basierend auf echten Buchungen"
                 />
                 <MiniStatusCard
                   icon={Scissors}
                   label="Beliebteste Leistung"
-                  value="Damenhaarschnitt"
-                  subtext="diesen Monat"
+                  value={topServices[0]?.name || "—"}
+                  subtext="aus aktuellen Anfragen"
                 />
                 <MiniStatusCard
                   icon={Euro}
                   label="Tagesumsatz"
-                  value="640 €"
-                  subtext="geschätzter Stand"
+                  value={`${totalRevenue.toFixed(2)} €`}
+                  subtext="basierend auf Buchungswerten"
                 />
               </div>
             </SectionCard>
@@ -302,6 +386,17 @@ export default function Dashboard() {
       </div>
     </div>
   );
+}
+
+function formatStatus(status) {
+  const map = {
+    pending: "Offen",
+    confirmed: "Bestätigt",
+    completed: "Abgeschlossen",
+    cancelled: "Storniert",
+  };
+
+  return map[status] || status || "Offen";
 }
 
 function StatCard({ item }) {
@@ -340,6 +435,13 @@ function SectionCard({ title, right, children }) {
 }
 
 function AppointmentRow({ appointment }) {
+  const statusClass =
+    appointment.status === "Bestätigt"
+      ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+      : appointment.status === "Storniert"
+        ? "border-red-500/20 bg-red-500/10 text-red-300"
+        : "border-yellow-500/20 bg-yellow-500/10 text-yellow-300";
+
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-4">
@@ -353,7 +455,9 @@ function AppointmentRow({ appointment }) {
         </div>
       </div>
 
-      <span className="inline-flex w-fit rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300">
+      <span
+        className={`inline-flex w-fit rounded-full border px-3 py-1 text-xs ${statusClass}`}
+      >
         {appointment.status}
       </span>
     </div>

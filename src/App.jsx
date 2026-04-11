@@ -14,6 +14,8 @@ import WhatsAppButton from "./components/WhatsAppButton";
 import MobileBookingBar from "./components/MobileBookingBar";
 import PromoBanner from "./components/PromoBanner";
 
+import AdminProtectedRoute from "./admin/components/AdminProtectedRoute";
+import AdminLogin from "./admin/pages/AdminLogin";
 import AdminLayout from "./admin/components/AdminLayout";
 import Dashboard from "./admin/pages/Dashboard";
 import Appointments from "./admin/pages/Appointments";
@@ -51,19 +53,21 @@ export default function App() {
     <Routes>
       <Route path="/" element={<PublicSite />} />
 
+      <Route path="/admin/login" element={<AdminLogin />} />
       <Route
-        path="/admin/login"
-        element={<Navigate to="/admin/dashboard" replace />}
-      />
-
-      <Route path="/admin" element={<AdminLayout />}>
-        <Route index element={<Navigate to="dashboard" replace />} />
+        path="/admin"
+        element={
+          <AdminProtectedRoute>
+            <AdminLayout />
+          </AdminProtectedRoute>
+        }
+      >
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="appointments" element={<Appointments />} />
         <Route path="customers" element={<Customers />} />
-        <Route path="services" element={<AdminServices />} />
+        <Route path="services" element={<Services />} />
+        <Route path="coupons" element={<Coupons />} />
         <Route path="settings" element={<Settings />} />
-        <Route path="/admin/coupons" element={<Coupons />} />
       </Route>
     </Routes>
   );
