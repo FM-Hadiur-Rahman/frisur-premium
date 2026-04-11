@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, sans-serif;
+  background: linear-gradient(180deg, #120d12 0%, #1a1217 45%, #0d0a0f 100%);
+  color: #f8f0e3;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+img {
+  display: block;
+}
+
+a {
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(200, 174, 114, 0.28);
+  color: #fff5df;
+}
+.booking-calendar .rdp {
+  --rdp-accent-color: #d7ba77;
+  --rdp-background-color: rgba(215, 186, 119, 0.18);
+  margin: 0;
+  color: #f8f0e3;
+}
+
+.booking-calendar .rdp-months {
+  justify-content: center;
+}
+
+.booking-calendar .rdp-month {
+  width: 100%;
+}
+
+.booking-calendar .rdp-caption_label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff2d2;
+}
+
+.booking-calendar .rdp-head_cell {
+  color: #c8ae72;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.booking-calendar .rdp-cell {
+  padding: 0.2rem;
+}
+
+.booking-calendar .rdp-day {
+  border-radius: 9999px;
+  color: #eadcbe;
+  transition: all 0.2s ease;
+}
+
+.booking-calendar .rdp-day:hover {
+  background: rgba(215, 186, 119, 0.12);
+}
+
+.booking-calendar .rdp-day_selected {
+  background: #d7ba77 !important;
+  color: #23170d !important;
+  font-weight: 700;
+}
+
+.booking-calendar .rdp-day_today {
+  border: 1px solid rgba(200, 174, 114, 0.4);
+  color: #f1ddb0;
+  font-weight: 700;
+}
+
+.booking-calendar .rdp-day_disabled {
+  color: #6f6254 !important;
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.booking-calendar .rdp-button_previous,
+.booking-calendar .rdp-button_next {
+  color: #f1ddb0;
+}
