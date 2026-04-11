@@ -13,6 +13,7 @@ export default function BookingForm() {
     message: "",
   });
 
+  // Demo: fully booked dates
   const bookedDates = useMemo(
     () => [
       new Date(2026, 3, 14),
@@ -23,13 +24,58 @@ export default function BookingForm() {
     [],
   );
 
+  // Demo: all available time slots
+  const allTimeSlots = [
+    "09:00",
+    "09:30",
+    "10:00",
+    "10:30",
+    "11:00",
+    "11:30",
+    "12:00",
+    "14:00",
+    "14:30",
+    "15:00",
+    "15:30",
+    "16:00",
+    "16:30",
+    "17:00",
+  ];
+
+  // Demo: booked times for partially available dates
+  const bookedTimeSlots = {
+    "2026-04-12": ["09:00", "09:30"],
+    "2026-04-13": ["10:00", "10:30", "11:00"],
+    "2026-04-15": ["14:00", "14:30"],
+    "2026-04-17": ["09:00", "11:30", "16:00"],
+    "2026-04-19": ["10:30", "15:00"],
+    "2026-04-20": ["09:00", "12:00", "14:30"],
+  };
+
   const disabledDays = useMemo(() => {
     return [{ before: new Date() }, ...bookedDates];
   }, [bookedDates]);
 
+  const formattedSelectedDate = selectedDate
+    ? format(selectedDate, "yyyy-MM-dd")
+    : null;
+
+  const unavailableSlots = formattedSelectedDate
+    ? bookedTimeSlots[formattedSelectedDate] || []
+    : [];
+
+  const availableSlots = allTimeSlots.filter(
+    (slot) => !unavailableSlots.includes(slot),
+  );
+
   function handleChange(e) {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+  }
+
+  function handleSelectDate(date) {
+    setSelectedDate(date);
+    setForm((prev) => ({ ...prev, time: "" }));
   }
 
   function handleSubmit(e) {
@@ -37,6 +83,11 @@ export default function BookingForm() {
 
     if (!selectedDate) {
       alert("Bitte wählen Sie zuerst ein freies Datum aus.");
+      return;
+    }
+
+    if (!form.time) {
+      alert("Bitte wählen Sie eine verfügbare Uhrzeit aus.");
       return;
     }
 
@@ -62,8 +113,8 @@ export default function BookingForm() {
           Buchen Sie Ihren Wunschtermin
         </h2>
         <p className="mt-4 max-w-2xl text-[#cfbea2]">
-          Wählen Sie ein verfügbares Datum und senden Sie Ihre Anfrage bequem
-          online an unser Studio.
+          Wählen Sie ein verfügbares Datum und eine freie Uhrzeit und senden Sie
+          Ihre Anfrage bequem online an unser Studio.
         </p>
       </div>
 
@@ -89,7 +140,7 @@ export default function BookingForm() {
               <DayPicker
                 mode="single"
                 selected={selectedDate}
-                onSelect={setSelectedDate}
+                onSelect={handleSelectDate}
                 disabled={disabledDays}
                 showOutsideDays
               />
@@ -197,14 +248,52 @@ export default function BookingForm() {
               </option>
             </select>
 
-            <input
-              className="h-12 rounded-2xl border border-[#c8ae72]/18 bg-[rgba(255,255,255,0.03)] px-4 text-[#fff5df] outline-none"
-              type="time"
-              name="time"
-              value={form.time}
-              onChange={handleChange}
-              required
-            />
+            <div className="rounded-2xl border border-[#c8ae72]/18 bg-[rgba(255,255,255,0.03)] p-4">
+              <p className="mb-3 text-sm text-[#c8ae72]">
+                Verfügbare Uhrzeiten
+              </p>
+
+              {!selectedDate ? (
+                <p className="text-sm text-[#cfbea2]">
+                  Bitte wählen Sie zuerst ein Datum aus.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {availableSlots.length > 0 ? (
+                    availableSlots.map((slot) => (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            time: slot,
+                          }))
+                        }
+                        className={`rounded-xl px-4 py-2 text-sm transition ${
+                          form.time === slot
+                            ? "bg-gradient-to-r from-[#f1ddb0] via-[#d7ba77] to-[#b6934f] text-[#23170d]"
+                            : "border border-[#c8ae72]/20 bg-[rgba(255,255,255,0.03)] text-[#f8f0e3] hover:bg-[#c8ae72]/10"
+                        }`}
+                      >
+                        {slot}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="text-sm text-[#cfbea2]">
+                      Für dieses Datum sind keine Uhrzeiten mehr verfügbar.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {form.time ? (
+              <p className="text-sm text-[#e8d39a]">
+                Gewählte Uhrzeit:{" "}
+                <span className="font-semibold">{form.time}</span>
+              </p>
+            ) : null}
 
             <textarea
               className="min-h-32 rounded-2xl border border-[#c8ae72]/18 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-[#fff5df] outline-none placeholder:text-[#a99a86]"
