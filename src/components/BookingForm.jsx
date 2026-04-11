@@ -3,6 +3,38 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { format } from "date-fns";
 
+const servicePrices = {
+  "Signature Damenhaarschnitt": 79,
+  "Executive Herrenhaarschnitt": 49,
+  "Farbe & Balayage Deluxe": 189,
+  "Braut- & Eventstyling": 249,
+};
+
+const demoCoupons = [
+  {
+    code: "WELCOME10",
+    type: "percentage",
+    value: 10,
+    minAmount: 30,
+    isActive: true,
+  },
+  {
+    code: "VIP15",
+    type: "fixed",
+    value: 15,
+    minAmount: 80,
+    isActive: true,
+  },
+  {
+    code: "COLOR20",
+    type: "fixed",
+    value: 20,
+    minAmount: 150,
+    isActive: true,
+    service: "Farbe & Balayage Deluxe",
+  },
+];
+
 export default function BookingForm() {
   const [selectedDate, setSelectedDate] = useState();
   const [form, setForm] = useState({
@@ -11,9 +43,11 @@ export default function BookingForm() {
     service: "",
     time: "",
     message: "",
+    couponCode: "",
   });
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponMessage, setCouponMessage] = useState("");
 
-  // Demo: fully booked dates
   const bookedDates = useMemo(
     () => [
       new Date(2026, 3, 14),
@@ -24,7 +58,6 @@ export default function BookingForm() {
     [],
   );
 
-  // Demo: all available time slots
   const allTimeSlots = [
     "09:00",
     "09:30",
@@ -42,7 +75,6 @@ export default function BookingForm() {
     "17:00",
   ];
 
-  // Demo: booked times for partially available dates
   const bookedTimeSlots = {
     "2026-04-12": ["09:00", "09:30"],
     "2026-04-13": ["10:00", "10:30", "11:00"],
@@ -68,14 +100,100 @@ export default function BookingForm() {
     (slot) => !unavailableSlots.includes(slot),
   );
 
+  const servicePrice = form.service ? servicePrices[form.service] || 0 : 0;
+
+  const discountAmount = useMemo(() => {
+    if (!appliedCoupon || !servicePrice) return 0;
+
+    if (appliedCoupon.type === "percentage") {
+      return Number(((servicePrice * appliedCoupon.value) / 100).toFixed(2));
+    }
+
+    if (appliedCoupon.type === "fixed") {
+      return Math.min(appliedCoupon.value, servicePrice);
+    }
+
+    return 0;
+  }, [appliedCoupon, servicePrice]);
+
+  const finalPrice = Math.max(servicePrice - discountAmount, 0);
+
   function handleChange(e) {
     const { name, value } = e.target;
+
     setForm((prev) => ({ ...prev, [name]: value }));
+
+    if (name === "service") {
+      setAppliedCoupon(null);
+      setCouponMessage("");
+    }
+
+    if (name === "couponCode") {
+      setAppliedCoupon(null);
+      setCouponMessage("");
+    }
   }
 
   function handleSelectDate(date) {
     setSelectedDate(date);
     setForm((prev) => ({ ...prev, time: "" }));
+  }
+
+  function handleApplyCoupon() {
+    if (!form.couponCode.trim()) {
+      setAppliedCoupon(null);
+      setCouponMessage("Bitte geben Sie einen Gutscheincode ein.");
+      return;
+    }
+
+    if (!form.service) {
+      setAppliedCoupon(null);
+      setCouponMessage("Bitte wählen Sie zuerst eine Leistung aus.");
+      return;
+    }
+
+    const code = form.couponCode.trim().toUpperCase();
+
+    const foundCoupon = demoCoupons.find((coupon) => coupon.code === code);
+
+    if (!foundCoupon) {
+      setAppliedCoupon(null);
+      setCouponMessage("Dieser Gutscheincode ist ungültig.");
+      return;
+    }
+
+    if (!foundCoupon.isActive) {
+      setAppliedCoupon(null);
+      setCouponMessage("Dieser Gutscheincode ist derzeit nicht aktiv.");
+      return;
+    }
+
+    if (servicePrice < foundCoupon.minAmount) {
+      setAppliedCoupon(null);
+      setCouponMessage(
+        `Dieser Gutschein gilt erst ab ${foundCoupon.minAmount} €.`,
+      );
+      return;
+    }
+
+    if (foundCoupon.service && foundCoupon.service !== form.service) {
+      setAppliedCoupon(null);
+      setCouponMessage(
+        `Dieser Gutschein gilt nur für: ${foundCoupon.service}.`,
+      );
+      return;
+    }
+
+    setAppliedCoupon(foundCoupon);
+    setCouponMessage(
+      `Gutschein ${foundCoupon.code} wurde erfolgreich angewendet.`,
+    );
+  }
+
+  function handleRemoveCoupon() {
+    setAppliedCoupon(null);
+    setCouponMessage("Gutschein wurde entfernt.");
+    setForm((prev) => ({ ...prev, couponCode: "" }));
   }
 
   function handleSubmit(e) {
@@ -93,6 +211,10 @@ export default function BookingForm() {
 
     const payload = {
       ...form,
+      coupon: appliedCoupon ? appliedCoupon.code : null,
+      originalPrice: servicePrice,
+      discount: discountAmount,
+      totalPrice: finalPrice,
       date: format(selectedDate, "dd.MM.yyyy"),
     };
 
@@ -248,6 +370,74 @@ export default function BookingForm() {
               </option>
             </select>
 
+            {form.service ? (
+              <div className="rounded-2xl border border-[#c8ae72]/15 bg-[rgba(255,255,255,0.03)] p-4">
+                <p className="text-sm uppercase tracking-[0.2em] text-[#c8ae72]">
+                  Gewählte Leistung
+                </p>
+                <div className="mt-3 flex items-center justify-between gap-4">
+                  <span className="text-[#fff2d2]">{form.service}</span>
+                  <span className="text-lg font-semibold text-[#f1ddb0]">
+                    {servicePrice.toFixed(2)} €
+                  </span>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+              <input
+                className="h-12 rounded-2xl border border-[#c8ae72]/18 bg-[rgba(255,255,255,0.03)] px-4 text-[#fff5df] uppercase outline-none placeholder:text-[#a99a86]"
+                name="couponCode"
+                placeholder="Gutscheincode eingeben"
+                value={form.couponCode}
+                onChange={handleChange}
+              />
+
+              <button
+                type="button"
+                onClick={handleApplyCoupon}
+                className="h-12 rounded-2xl border border-[#c8ae72]/20 bg-[#c8ae72]/10 px-5 font-medium text-[#f1ddb0] transition hover:bg-[#c8ae72]/20"
+              >
+                Einlösen
+              </button>
+            </div>
+
+            {couponMessage ? (
+              <div
+                className={`rounded-2xl border px-4 py-3 text-sm ${
+                  appliedCoupon
+                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                    : "border-[#c8ae72]/15 bg-[rgba(255,255,255,0.03)] text-[#cfbea2]"
+                }`}
+              >
+                {couponMessage}
+              </div>
+            ) : null}
+
+            {appliedCoupon ? (
+              <div className="flex items-center justify-between rounded-2xl border border-[#c8ae72]/15 bg-[rgba(255,255,255,0.03)] px-4 py-3">
+                <div>
+                  <p className="text-sm text-[#fff2d2]">
+                    Gutschein aktiv:{" "}
+                    <span className="font-semibold">{appliedCoupon.code}</span>
+                  </p>
+                  <p className="text-xs text-[#c9bba5]">
+                    {appliedCoupon.type === "percentage"
+                      ? `${appliedCoupon.value}% Rabatt`
+                      : `${appliedCoupon.value} € Rabatt`}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleRemoveCoupon}
+                  className="text-sm text-[#e8d39a] transition hover:text-[#fff2d2]"
+                >
+                  Entfernen
+                </button>
+              </div>
+            ) : null}
+
             <div className="rounded-2xl border border-[#c8ae72]/18 bg-[rgba(255,255,255,0.03)] p-4">
               <p className="mb-3 text-sm text-[#c8ae72]">
                 Verfügbare Uhrzeiten
@@ -294,6 +484,31 @@ export default function BookingForm() {
                 <span className="font-semibold">{form.time}</span>
               </p>
             ) : null}
+
+            <div className="rounded-[24px] border border-[#c8ae72]/18 bg-[rgba(255,255,255,0.03)] p-5">
+              <p className="text-sm uppercase tracking-[0.22em] text-[#c8ae72]">
+                Preisübersicht
+              </p>
+
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="flex items-center justify-between text-[#cfbea2]">
+                  <span>Leistung</span>
+                  <span>{servicePrice.toFixed(2)} €</span>
+                </div>
+
+                <div className="flex items-center justify-between text-[#cfbea2]">
+                  <span>Rabatt</span>
+                  <span>- {discountAmount.toFixed(2)} €</span>
+                </div>
+
+                <div className="h-px bg-[#c8ae72]/10" />
+
+                <div className="flex items-center justify-between text-base font-semibold text-[#fff2d2]">
+                  <span>Gesamt</span>
+                  <span>{finalPrice.toFixed(2)} €</span>
+                </div>
+              </div>
+            </div>
 
             <textarea
               className="min-h-32 rounded-2xl border border-[#c8ae72]/18 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-[#fff5df] outline-none placeholder:text-[#a99a86]"

@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import {
   CalendarDays,
-  Clock3,
   Search,
   Plus,
   Filter,
@@ -10,6 +9,7 @@ import {
   CheckCircle2,
   XCircle,
   Eye,
+  MoreHorizontal,
 } from "lucide-react";
 
 const initialAppointments = [
@@ -22,7 +22,7 @@ const initialAppointments = [
     service: "Balayage Deluxe",
     stylist: "Sophie",
     status: "confirmed",
-    notes: "First visit",
+    notes: "Erstbesuch",
   },
   {
     id: 2,
@@ -44,7 +44,7 @@ const initialAppointments = [
     service: "Herrenhaarschnitt",
     stylist: "Emma",
     status: "cancelled",
-    notes: "Cancelled by customer",
+    notes: "Vom Kunden storniert",
   },
   {
     id: 4,
@@ -79,13 +79,23 @@ export default function Appointments() {
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
+  const [openMenuId, setOpenMenuId] = useState(null);
+
+  const todayKey = useMemo(() => {
+    const today = new Date();
+    return today.toISOString().split("T")[0];
+  }, []);
 
   const filteredAppointments = useMemo(() => {
     return appointments.filter((item) => {
+      const q = search.toLowerCase().trim();
+
       const matchesSearch =
-        item.customer.toLowerCase().includes(search.toLowerCase()) ||
-        item.service.toLowerCase().includes(search.toLowerCase()) ||
-        item.stylist.toLowerCase().includes(search.toLowerCase());
+        !q ||
+        item.customer.toLowerCase().includes(q) ||
+        item.service.toLowerCase().includes(q) ||
+        item.stylist.toLowerCase().includes(q) ||
+        item.phone.toLowerCase().includes(q);
 
       const matchesStatus =
         statusFilter === "all" ? true : item.status === statusFilter;
@@ -97,8 +107,7 @@ export default function Appointments() {
   }, [appointments, search, statusFilter, dateFilter]);
 
   const stats = useMemo(() => {
-    const today = "2026-04-12"; // later replace with dynamic current date
-    const todayAppointments = appointments.filter((a) => a.date === today);
+    const todayAppointments = appointments.filter((a) => a.date === todayKey);
 
     return {
       total: todayAppointments.length,
@@ -108,7 +117,7 @@ export default function Appointments() {
       cancelled: todayAppointments.filter((a) => a.status === "cancelled")
         .length,
     };
-  }, [appointments]);
+  }, [appointments, todayKey]);
 
   const openCreateModal = () => {
     setEditingAppointment(null);
@@ -129,6 +138,7 @@ export default function Appointments() {
       notes: appointment.notes,
     });
     setShowFormModal(true);
+    setOpenMenuId(null);
   };
 
   const handleSaveAppointment = (e) => {
@@ -140,7 +150,7 @@ export default function Appointments() {
       !formData.customer ||
       !formData.service
     ) {
-      alert("Please fill in the required fields.");
+      alert("Bitte füllen Sie die Pflichtfelder aus.");
       return;
     }
 
@@ -167,10 +177,16 @@ export default function Appointments() {
 
   const handleDelete = (id) => {
     const confirmed = window.confirm(
-      "Do you really want to delete this appointment?",
+      "Möchten Sie diesen Termin wirklich löschen?",
     );
     if (!confirmed) return;
+
     setAppointments((prev) => prev.filter((item) => item.id !== id));
+    setOpenMenuId(null);
+
+    if (selectedAppointment?.id === id) {
+      setSelectedAppointment(null);
+    }
   };
 
   const updateStatus = (id, newStatus) => {
@@ -179,16 +195,28 @@ export default function Appointments() {
         item.id === id ? { ...item, status: newStatus } : item,
       ),
     );
+
+    setSelectedAppointment((prev) =>
+      prev && prev.id === id ? { ...prev, status: newStatus } : prev,
+    );
+
+    setOpenMenuId(null);
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setDateFilter("");
   };
 
   return (
-    <div className="min-h-screen bg-[#08030a] px-6 py-8 text-white">
+    <div className="min-h-screen bg-[#08030a] px-6 pt-10 pb-8 text-white">
       <div className="mx-auto max-w-7xl">
         <div className="mb-2 text-xs uppercase tracking-[0.35em] text-[#c8a96b]">
           Termine
         </div>
 
-        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-4xl font-semibold">Terminverwaltung</h1>
             <p className="mt-2 text-sm text-white/60">
@@ -205,15 +233,15 @@ export default function Appointments() {
           </button>
         </div>
 
-        <div className="mb-6 grid gap-4 md:grid-cols-4">
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard title="Heute gesamt" value={stats.total} />
           <StatCard title="Bestätigt" value={stats.confirmed} />
           <StatCard title="Offen" value={stats.pending} />
           <StatCard title="Storniert" value={stats.cancelled} />
         </div>
 
-        <div className="mb-6 grid gap-4 rounded-3xl border border-white/10 bg-white/5 p-4 md:grid-cols-4">
-          <div className="relative md:col-span-2">
+        <div className="mb-6 grid gap-4 rounded-3xl border border-white/10 bg-white/5 p-4 lg:grid-cols-[1.5fr_260px_240px_auto]">
+          <div className="relative">
             <Search
               className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/40"
               size={18}
@@ -257,10 +285,18 @@ export default function Appointments() {
               className="w-full rounded-2xl border border-white/10 bg-black/20 py-3 pl-11 pr-4 text-white outline-none focus:border-[#d8b46a]/60"
             />
           </div>
+
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80 transition hover:bg-white/10"
+          >
+            Zurücksetzen
+          </button>
         </div>
 
         <div className="overflow-hidden rounded-3xl border border-[#6f4a24]/40 bg-gradient-to-br from-[#2a1714] to-[#11070f] shadow-[0_0_60px_rgba(216,180,106,0.08)]">
-          <div className="hidden md:grid grid-cols-7 gap-4 border-b border-white/10 px-6 py-5 text-xs uppercase tracking-[0.28em] text-[#c8a96b]">
+          <div className="hidden md:grid grid-cols-[120px_90px_1.45fr_1.2fr_1fr_130px_190px] gap-4 border-b border-white/10 px-6 py-5 text-xs uppercase tracking-[0.28em] text-[#c8a96b]">
             <div>Datum</div>
             <div>Uhrzeit</div>
             <div>Kunde</div>
@@ -283,41 +319,81 @@ export default function Appointments() {
                 {filteredAppointments.map((item) => (
                   <div
                     key={item.id}
-                    className="grid grid-cols-7 gap-4 border-b border-white/5 px-6 py-5 last:border-b-0"
+                    className="grid grid-cols-[120px_90px_1.45fr_1.2fr_1fr_130px_190px] items-center gap-4 border-b border-white/5 px-6 py-5 last:border-b-0"
                   >
                     <div>{formatDate(item.date)}</div>
                     <div>{item.time}</div>
-                    <div>
-                      <div className="font-medium">{item.customer}</div>
-                      <div className="text-xs text-white/45">{item.phone}</div>
+
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">
+                        {item.customer}
+                      </div>
+                      <div className="truncate text-xs text-white/45">
+                        {item.phone}
+                      </div>
                     </div>
-                    <div>{item.service}</div>
-                    <div>{item.stylist}</div>
+
+                    <div className="truncate">{item.service}</div>
+                    <div className="truncate">{item.stylist}</div>
+
                     <div>
                       <StatusBadge status={item.status} />
                     </div>
-                    <div className="flex justify-end gap-2">
+
+                    <div className="flex items-center justify-end gap-2">
                       <ActionButton
                         onClick={() => setSelectedAppointment(item)}
-                        icon={<Eye size={16} />}
+                        icon={<Eye size={15} />}
                         label="Ansehen"
                       />
+
                       <ActionButton
                         onClick={() => openEditModal(item)}
-                        icon={<Pencil size={16} />}
+                        icon={<Pencil size={15} />}
                         label="Bearbeiten"
                       />
-                      <ActionButton
-                        onClick={() => updateStatus(item.id, "confirmed")}
-                        icon={<CheckCircle2 size={16} />}
-                        label="Bestätigen"
-                      />
-                      <ActionButton
-                        danger
-                        onClick={() => handleDelete(item.id)}
-                        icon={<Trash2 size={16} />}
-                        label="Löschen"
-                      />
+
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpenMenuId((prev) =>
+                              prev === item.id ? null : item.id,
+                            )
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/80 transition hover:bg-white/10"
+                        >
+                          <MoreHorizontal size={15} />
+                          <span>Mehr</span>
+                        </button>
+
+                        {openMenuId === item.id && (
+                          <div className="absolute right-0 top-11 z-20 w-48 rounded-2xl border border-white/10 bg-[#140911] p-2 shadow-2xl">
+                            <DropdownItem
+                              onClick={() => updateStatus(item.id, "confirmed")}
+                              label="Als bestätigt markieren"
+                            />
+                            <DropdownItem
+                              onClick={() => updateStatus(item.id, "pending")}
+                              label="Als offen markieren"
+                            />
+                            <DropdownItem
+                              onClick={() => updateStatus(item.id, "completed")}
+                              label="Als abgeschlossen markieren"
+                            />
+                            <DropdownItem
+                              onClick={() => updateStatus(item.id, "cancelled")}
+                              label="Stornieren"
+                              danger
+                            />
+                            <DropdownItem
+                              onClick={() => handleDelete(item.id)}
+                              label="Löschen"
+                              danger
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -330,9 +406,13 @@ export default function Appointments() {
                     className="rounded-2xl border border-white/10 bg-black/20 p-4"
                   >
                     <div className="mb-3 flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="font-semibold">{item.customer}</h3>
-                        <p className="text-sm text-white/55">{item.service}</p>
+                      <div className="min-w-0">
+                        <h3 className="truncate font-semibold">
+                          {item.customer}
+                        </h3>
+                        <p className="truncate text-sm text-white/55">
+                          {item.service}
+                        </p>
                       </div>
                       <StatusBadge status={item.status} />
                     </div>
@@ -358,18 +438,23 @@ export default function Appointments() {
                     <div className="mt-4 flex flex-wrap gap-2">
                       <ActionButton
                         onClick={() => setSelectedAppointment(item)}
-                        icon={<Eye size={16} />}
+                        icon={<Eye size={15} />}
                         label="Ansehen"
                       />
                       <ActionButton
                         onClick={() => openEditModal(item)}
-                        icon={<Pencil size={16} />}
+                        icon={<Pencil size={15} />}
                         label="Bearbeiten"
+                      />
+                      <ActionButton
+                        onClick={() => updateStatus(item.id, "confirmed")}
+                        icon={<CheckCircle2 size={15} />}
+                        label="Bestätigen"
                       />
                       <ActionButton
                         danger
                         onClick={() => handleDelete(item.id)}
-                        icon={<Trash2 size={16} />}
+                        icon={<Trash2 size={15} />}
                         label="Löschen"
                       />
                     </div>
@@ -408,23 +493,19 @@ export default function Appointments() {
 
           <div className="mt-6 flex flex-wrap gap-2">
             <button
-              onClick={() => {
-                updateStatus(selectedAppointment.id, "confirmed");
-                setSelectedAppointment((prev) =>
-                  prev ? { ...prev, status: "confirmed" } : null,
-                );
-              }}
+              onClick={() => updateStatus(selectedAppointment.id, "confirmed")}
               className="rounded-xl bg-emerald-500/20 px-4 py-2 text-sm text-emerald-200"
             >
               Bestätigen
             </button>
             <button
-              onClick={() => {
-                updateStatus(selectedAppointment.id, "cancelled");
-                setSelectedAppointment((prev) =>
-                  prev ? { ...prev, status: "cancelled" } : null,
-                );
-              }}
+              onClick={() => updateStatus(selectedAppointment.id, "completed")}
+              className="rounded-xl bg-sky-500/20 px-4 py-2 text-sm text-sky-200"
+            >
+              Abschließen
+            </button>
+            <button
+              onClick={() => updateStatus(selectedAppointment.id, "cancelled")}
               className="rounded-xl bg-red-500/20 px-4 py-2 text-sm text-red-200"
             >
               Stornieren
@@ -524,7 +605,7 @@ export default function Appointments() {
             <div className="flex justify-end">
               <button
                 type="submit"
-                className="rounded-2xl bg-[#d8b46a] px-5 py-3 font-medium text-black"
+                className="rounded-2xl bg-[#d8b46a] px-5 py-3 font-medium text-black transition hover:brightness-110"
               >
                 {editingAppointment
                   ? "Änderungen speichern"
@@ -550,22 +631,22 @@ function StatCard({ title, value }) {
 function StatusBadge({ status }) {
   const styles = {
     confirmed:
-      "bg-emerald-500/20 text-emerald-300 border border-emerald-500/20",
-    pending: "bg-amber-500/20 text-amber-300 border border-amber-500/20",
-    cancelled: "bg-red-500/20 text-red-300 border border-red-500/20",
-    completed: "bg-sky-500/20 text-sky-300 border border-sky-500/20",
+      "border border-emerald-500/20 bg-emerald-500/20 text-emerald-300",
+    pending: "border border-amber-500/20 bg-amber-500/20 text-amber-300",
+    cancelled: "border border-red-500/20 bg-red-500/20 text-red-300",
+    completed: "border border-sky-500/20 bg-sky-500/20 text-sky-300",
   };
 
   const labels = {
     confirmed: "Bestätigt",
     pending: "Offen",
     cancelled: "Storniert",
-    completed: "Abgeschlossen",
+    completed: "Erledigt",
   };
 
   return (
     <span
-      className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${styles[status]}`}
+      className={`inline-flex w-fit whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium ${styles[status]}`}
     >
       {labels[status]}
     </span>
@@ -575,15 +656,32 @@ function StatusBadge({ status }) {
 function ActionButton({ icon, label, onClick, danger = false }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border px-2.5 py-1.5 text-xs transition ${
         danger
           ? "border-red-500/20 bg-red-500/10 text-red-200 hover:bg-red-500/20"
           : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
       }`}
     >
       {icon}
-      <span className="hidden xl:inline">{label}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function DropdownItem({ label, onClick, danger = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${
+        danger
+          ? "text-red-300 hover:bg-red-500/10"
+          : "text-white/80 hover:bg-white/5"
+      }`}
+    >
+      {label}
     </button>
   );
 }
@@ -616,8 +714,9 @@ function Modal({ title, children, onClose }) {
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-xl font-semibold">{title}</h2>
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70 transition hover:bg-white/10"
           >
             <XCircle size={18} />
           </button>

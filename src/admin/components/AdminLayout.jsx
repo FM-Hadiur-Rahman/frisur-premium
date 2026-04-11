@@ -5,6 +5,7 @@ const links = [
   { to: "/admin/appointments", label: "Termine" },
   { to: "/admin/customers", label: "Kunden" },
   { to: "/admin/services", label: "Leistungen" },
+  { to: "/admin/coupons", label: "Gutscheine" },
   { to: "/admin/settings", label: "Einstellungen" },
 ];
 

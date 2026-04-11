@@ -12,6 +12,7 @@ import ContactSection from "./components/ContactSection";
 import Footer from "./components/Footer";
 import WhatsAppButton from "./components/WhatsAppButton";
 import MobileBookingBar from "./components/MobileBookingBar";
+import PromoBanner from "./components/PromoBanner";
 
 import AdminLayout from "./admin/components/AdminLayout";
 import Dashboard from "./admin/pages/Dashboard";
@@ -19,6 +20,7 @@ import Appointments from "./admin/pages/Appointments";
 import Customers from "./admin/pages/Customers";
 import AdminServices from "./admin/pages/Services";
 import Settings from "./admin/pages/Settings";
+import Coupons from "./admin/pages/Coupons";
 
 function PublicSite() {
   return (
@@ -27,6 +29,8 @@ function PublicSite() {
       <Navbar />
       <main>
         <Hero />
+        <PromoBanner />
+
         <Services />
         <PriceOverview />
         <Team />
@@ -59,6 +63,7 @@ export default function App() {
         <Route path="customers" element={<Customers />} />
         <Route path="services" element={<AdminServices />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="/admin/coupons" element={<Coupons />} />
       </Route>
     </Routes>
   );
