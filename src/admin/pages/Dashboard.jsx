@@ -1,15 +1,25 @@
-import StatCard from "../components/StatCard";
+function Card({ title, value, text }) {
+  return (
+    <div className="rounded-[24px] border border-[#c8ae72]/10 bg-[linear-gradient(180deg,rgba(38,25,24,0.95),rgba(20,14,19,0.96))] p-6">
+      <p className="text-sm uppercase tracking-[0.22em] text-[#c8ae72]">
+        {title}
+      </p>
+      <p className="mt-4 text-4xl font-bold text-[#fff2d2]">{value}</p>
+      <p className="mt-3 text-sm leading-6 text-[#cfbea2]">{text}</p>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   return (
-    <div>
-      <div className="mb-8">
+    <div className="space-y-8">
+      <div>
         <p className="text-sm uppercase tracking-[0.24em] text-[#c8ae72]">
           Übersicht
         </p>
-        <h2 className="mt-2 text-3xl font-bold text-[#fff5df]">
+        <h1 className="mt-2 text-4xl font-bold text-[#fff5df]">
           Willkommen im Salon-Dashboard
-        </h2>
+        </h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[#cfbea2]">
           Verwalten Sie Termine, Kundendaten, Leistungen und wichtige
           Einstellungen Ihres Studios in einer zentralen Übersicht.
@@ -17,30 +27,30 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard
+        <Card
           title="Heutige Termine"
           value="12"
-          subtitle="Geplante Buchungen für den heutigen Tag."
+          text="Geplante Buchungen für den heutigen Tag."
         />
-        <StatCard
+        <Card
           title="Neue Kunden"
           value="28"
-          subtitle="Neue Anfragen und Kundinnen im aktuellen Monat."
+          text="Neue Anfragen im aktuellen Monat."
         />
-        <StatCard
+        <Card
           title="Leistungen"
           value="14"
-          subtitle="Aktive Dienstleistungen im Salon-System."
+          text="Aktive Dienstleistungen im Salon-System."
         />
-        <StatCard
+        <Card
           title="Umsatz Vorschau"
           value="4.820 €"
-          subtitle="Geschätzter Monatsumsatz auf Basis der Demo-Daten."
+          text="Geschätzter Monatsumsatz auf Basis der Demo-Daten."
         />
       </div>
 
-      <div className="mt-8 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-[32px] border border-[#c8ae72]/15 bg-[linear-gradient(180deg,rgba(38,25,24,0.95),rgba(20,14,19,0.96))] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-[24px] border border-[#c8ae72]/10 bg-[linear-gradient(180deg,rgba(38,25,24,0.95),rgba(20,14,19,0.96))] p-6">
           <p className="text-sm uppercase tracking-[0.22em] text-[#c8ae72]">
             Heute anstehend
           </p>
@@ -54,7 +64,7 @@ export default function Dashboard() {
             ].map(([time, name, service]) => (
               <div
                 key={`${time}-${name}`}
-                className="flex items-center justify-between rounded-2xl border border-[#c8ae72]/10 bg-[rgba(255,255,255,0.03)] px-4 py-4"
+                className="flex items-center justify-between rounded-2xl border border-[#c8ae72]/10 bg-white/5 px-4 py-4"
               >
                 <div>
                   <p className="text-lg font-semibold text-[#fff2d2]">{time}</p>
@@ -69,7 +79,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="rounded-[32px] border border-[#c8ae72]/15 bg-[linear-gradient(180deg,rgba(38,25,24,0.95),rgba(20,14,19,0.96))] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+        <div className="rounded-[24px] border border-[#c8ae72]/10 bg-[linear-gradient(180deg,rgba(38,25,24,0.95),rgba(20,14,19,0.96))] p-6">
           <p className="text-sm uppercase tracking-[0.22em] text-[#c8ae72]">
             Schnellzugriff
           </p>
@@ -84,7 +94,7 @@ export default function Dashboard() {
               <button
                 key={item}
                 type="button"
-                className="rounded-2xl border border-[#c8ae72]/15 bg-[rgba(255,255,255,0.03)] px-4 py-4 text-left text-sm text-[#eadcbe] transition hover:bg-[rgba(255,255,255,0.05)]"
+                className="rounded-2xl border border-[#c8ae72]/10 bg-white/5 px-4 py-4 text-left text-sm text-[#eadcbe] hover:bg-white/10"
               >
                 {item}
               </button>
