@@ -1,9 +1,9 @@
-import img1 from "../assets/stylist-1.jpg";
-import img2 from "../assets/stylist-2.jpg";
-import img3 from "../assets/stylist-3.jpg";
-import img4 from "../assets/stylist-4.jpg";
-import img5 from "../assets/stylist-5.jpg";
-import img6 from "../assets/stylist-6.jpg";
+import img1 from "../assets/stylist-7.jpg";
+import img2 from "../assets/stylist-8.jpg";
+import img3 from "../assets/stylist-9.jpg";
+import img4 from "../assets/stylist-10.jpg";
+import img5 from "../assets/stylist-11.jpg";
+import img6 from "../assets/stylist-12.jpg";
 
 export default function Gallery() {
   const images = [img1, img2, img3, img4, img5, img6];
