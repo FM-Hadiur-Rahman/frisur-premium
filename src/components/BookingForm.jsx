@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { format } from "date-fns";
+import toast from "react-hot-toast";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5005/api";
@@ -13,6 +14,8 @@ export default function BookingForm() {
   const [loadingServices, setLoadingServices] = useState(true);
   const [loadingCoupons, setLoadingCoupons] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [bookedSlots, setBookedSlots] = useState([]);
+  const [loadingBookedSlots, setLoadingBookedSlots] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -25,7 +28,7 @@ export default function BookingForm() {
 
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponMessage, setCouponMessage] = useState("");
-  console.log("API_BASE:", import.meta.env.VITE_API_BASE_URL);
+
   useEffect(() => {
     async function fetchServices() {
       try {
@@ -41,6 +44,7 @@ export default function BookingForm() {
         setServices(data.data || []);
       } catch (error) {
         console.error("Services load error:", error);
+        toast.error("Leistungen konnten nicht geladen werden.");
       } finally {
         setLoadingServices(false);
       }
@@ -60,6 +64,7 @@ export default function BookingForm() {
         setCoupons(data.data || []);
       } catch (error) {
         console.error("Coupons load error:", error);
+        toast.error("Gutscheine konnten nicht geladen werden.");
       } finally {
         setLoadingCoupons(false);
       }
@@ -96,15 +101,6 @@ export default function BookingForm() {
     "17:00",
   ];
 
-  const bookedTimeSlots = {
-    "2026-04-12": ["09:00", "09:30"],
-    "2026-04-13": ["10:00", "10:30", "11:00"],
-    "2026-04-15": ["14:00", "14:30"],
-    "2026-04-17": ["09:00", "11:30", "16:00"],
-    "2026-04-19": ["10:30", "15:00"],
-    "2026-04-20": ["09:00", "12:00", "14:30"],
-  };
-
   const disabledDays = useMemo(() => {
     return [{ before: new Date() }, ...bookedDates];
   }, [bookedDates]);
@@ -113,13 +109,43 @@ export default function BookingForm() {
     ? format(selectedDate, "yyyy-MM-dd")
     : null;
 
-  const unavailableSlots = formattedSelectedDate
-    ? bookedTimeSlots[formattedSelectedDate] || []
-    : [];
+  useEffect(() => {
+    async function fetchBookedSlots() {
+      if (!formattedSelectedDate) {
+        setBookedSlots([]);
+        return;
+      }
 
-  const availableSlots = allTimeSlots.filter(
-    (slot) => !unavailableSlots.includes(slot),
-  );
+      try {
+        setLoadingBookedSlots(true);
+
+        const res = await fetch(
+          `${API_BASE}/appointments/booked-slots?date=${encodeURIComponent(formattedSelectedDate)}`,
+        );
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(
+            data.message || "Gebuchte Uhrzeiten konnten nicht geladen werden.",
+          );
+        }
+
+        setBookedSlots(data.data || []);
+      } catch (error) {
+        console.error("Booked slots load error:", error);
+        toast.error("Gebuchte Uhrzeiten konnten nicht geladen werden.");
+        setBookedSlots([]);
+      } finally {
+        setLoadingBookedSlots(false);
+      }
+    }
+
+    fetchBookedSlots();
+  }, [formattedSelectedDate]);
+
+  const availableSlots = useMemo(() => {
+    return allTimeSlots.filter((slot) => !bookedSlots.includes(slot));
+  }, [bookedSlots]);
 
   const selectedService = useMemo(() => {
     return (
@@ -150,18 +176,25 @@ export default function BookingForm() {
   function handleChange(e) {
     const { name, value } = e.target;
 
-    setForm((prev) => ({ ...prev, [name]: value }));
-
     if (name === "serviceId") {
+      setForm((prev) => ({
+        ...prev,
+        serviceId: value,
+        couponCode: "",
+      }));
       setAppliedCoupon(null);
       setCouponMessage("");
-      setForm((prev) => ({ ...prev, serviceId: value, couponCode: "" }));
+      return;
     }
 
     if (name === "couponCode") {
+      setForm((prev) => ({ ...prev, couponCode: value }));
       setAppliedCoupon(null);
       setCouponMessage("");
+      return;
     }
+
+    setForm((prev) => ({ ...prev, [name]: value }));
   }
 
   function handleSelectDate(date) {
@@ -173,12 +206,14 @@ export default function BookingForm() {
     if (!form.couponCode.trim()) {
       setAppliedCoupon(null);
       setCouponMessage("Bitte geben Sie einen Gutscheincode ein.");
+      toast.error("Bitte geben Sie einen Gutscheincode ein.");
       return;
     }
 
     if (!selectedService) {
       setAppliedCoupon(null);
       setCouponMessage("Bitte wählen Sie zuerst eine Leistung aus.");
+      toast.error("Bitte wählen Sie zuerst eine Leistung aus.");
       return;
     }
 
@@ -188,12 +223,14 @@ export default function BookingForm() {
     if (!foundCoupon) {
       setAppliedCoupon(null);
       setCouponMessage("Dieser Gutscheincode ist ungültig.");
+      toast.error("Dieser Gutscheincode ist ungültig.");
       return;
     }
 
     if (!foundCoupon.isActive) {
       setAppliedCoupon(null);
       setCouponMessage("Dieser Gutscheincode ist derzeit nicht aktiv.");
+      toast.error("Dieser Gutscheincode ist derzeit nicht aktiv.");
       return;
     }
 
@@ -202,6 +239,7 @@ export default function BookingForm() {
       setCouponMessage(
         `Dieser Gutschein gilt erst ab ${foundCoupon.minAmount} €.`,
       );
+      toast.error(`Dieser Gutschein gilt erst ab ${foundCoupon.minAmount} €.`);
       return;
     }
 
@@ -210,7 +248,8 @@ export default function BookingForm() {
       foundCoupon.appliesToService._id !== selectedService._id
     ) {
       setAppliedCoupon(null);
-      setCouponMessage(`Dieser Gutschein gilt nicht für diese Leistung.`);
+      setCouponMessage("Dieser Gutschein gilt nicht für diese Leistung.");
+      toast.error("Dieser Gutschein gilt nicht für diese Leistung.");
       return;
     }
 
@@ -218,29 +257,31 @@ export default function BookingForm() {
     setCouponMessage(
       `Gutschein ${foundCoupon.code} wurde erfolgreich angewendet.`,
     );
+    toast.success(`Gutschein ${foundCoupon.code} wurde angewendet.`);
   }
 
   function handleRemoveCoupon() {
     setAppliedCoupon(null);
     setCouponMessage("Gutschein wurde entfernt.");
     setForm((prev) => ({ ...prev, couponCode: "" }));
+    toast.success("Gutschein wurde entfernt.");
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
 
     if (!selectedDate) {
-      alert("Bitte wählen Sie zuerst ein freies Datum aus.");
+      toast.error("Bitte wählen Sie zuerst ein freies Datum aus.");
       return;
     }
 
     if (!form.time) {
-      alert("Bitte wählen Sie eine verfügbare Uhrzeit aus.");
+      toast.error("Bitte wählen Sie eine verfügbare Uhrzeit aus.");
       return;
     }
 
     if (!form.serviceId) {
-      alert("Bitte wählen Sie eine Leistung aus.");
+      toast.error("Bitte wählen Sie eine Leistung aus.");
       return;
     }
 
@@ -273,9 +314,11 @@ export default function BookingForm() {
         );
       }
 
-      console.log("Appointment created:", data);
+      toast.success("Ihre Terminanfrage wurde erfolgreich gesendet.");
 
-      alert("Ihre Terminanfrage wurde erfolgreich gesendet.");
+      setBookedSlots((prev) =>
+        prev.includes(form.time) ? prev : [...prev, form.time],
+      );
 
       setForm({
         name: "",
@@ -285,12 +328,11 @@ export default function BookingForm() {
         message: "",
         couponCode: "",
       });
-      setSelectedDate(undefined);
       setAppliedCoupon(null);
       setCouponMessage("");
     } catch (error) {
       console.error("Appointment submit error:", error);
-      alert(error.message || "Ein Fehler ist aufgetreten.");
+      toast.error(error.message || "Ein Fehler ist aufgetreten.");
     } finally {
       setSubmitting(false);
     }
@@ -531,6 +573,10 @@ export default function BookingForm() {
               {!selectedDate ? (
                 <p className="text-sm text-[#cfbea2]">
                   Bitte wählen Sie zuerst ein Datum aus.
+                </p>
+              ) : loadingBookedSlots ? (
+                <p className="text-sm text-[#cfbea2]">
+                  Uhrzeiten werden geladen...
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-2">
