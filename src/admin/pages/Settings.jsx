@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5005/api";
+
 const defaultSettings = {
   salonName: "Maison Élégance",
   phone: "+49 211 12345678",
@@ -31,16 +34,54 @@ export default function Settings() {
   const [errors, setErrors] = useState({});
   const [status, setStatus] = useState({ type: "", message: "" });
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("salon-settings");
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      setSettings(parsed);
-      setSavedSettings(parsed);
-    }
-    setLoading(false);
+    fetchSettings();
   }, []);
+
+  async function fetchSettings() {
+    try {
+      setLoading(true);
+      setStatus({ type: "", message: "" });
+
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`${API_BASE}/settings`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to load settings.");
+      }
+
+      const normalizedSettings = {
+        ...defaultSettings,
+        ...data.data,
+        openingHours: {
+          ...defaultSettings.openingHours,
+          ...(data.data?.openingHours || {}),
+        },
+      };
+
+      setSettings(normalizedSettings);
+      setSavedSettings(normalizedSettings);
+    } catch (error) {
+      console.error("Settings load error:", error);
+
+      setStatus({
+        type: "error",
+        message: error.message || "Failed to load settings.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const hasChanges = useMemo(() => {
     return JSON.stringify(settings) !== JSON.stringify(savedSettings);
@@ -63,9 +104,13 @@ export default function Settings() {
   const validate = () => {
     const newErrors = {};
 
-    if (!settings.salonName.trim())
+    if (!settings.salonName.trim()) {
       newErrors.salonName = "Salon name is required.";
-    if (!settings.phone.trim()) newErrors.phone = "Phone number is required.";
+    }
+
+    if (!settings.phone.trim()) {
+      newErrors.phone = "Phone number is required.";
+    }
 
     if (!settings.email.trim()) {
       newErrors.email = "Email is required.";
@@ -73,17 +118,19 @@ export default function Settings() {
       newErrors.email = "Enter a valid email address.";
     }
 
-    if (!settings.address.trim()) newErrors.address = "Address is required.";
+    if (!settings.address.trim()) {
+      newErrors.address = "Address is required.";
+    }
 
-    if (settings.slotDuration < 5) {
+    if (Number(settings.slotDuration) < 5) {
       newErrors.slotDuration = "Slot duration must be at least 5 minutes.";
     }
 
-    if (settings.breakBetweenAppointments < 0) {
+    if (Number(settings.breakBetweenAppointments) < 0) {
       newErrors.breakBetweenAppointments = "Break time cannot be negative.";
     }
 
-    if (settings.cancellationHours < 0) {
+    if (Number(settings.cancellationHours) < 0) {
       newErrors.cancellationHours = "Cancellation time cannot be negative.";
     }
 
@@ -118,26 +165,99 @@ export default function Settings() {
     }
 
     try {
-      // Demo persistence
-      localStorage.setItem("salon-settings", JSON.stringify(settings));
+      setSaving(true);
 
-      // Real backend example:
-      // await axios.put("/api/admin/settings", settings);
+      const token = localStorage.getItem("token");
 
-      setSavedSettings(settings);
-      setStatus({ type: "success", message: "Settings saved successfully." });
+      const res = await fetch(`${API_BASE}/settings`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(settings),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to save settings.");
+      }
+
+      const normalizedSettings = {
+        ...defaultSettings,
+        ...data.data,
+        openingHours: {
+          ...defaultSettings.openingHours,
+          ...(data.data?.openingHours || {}),
+        },
+      };
+
+      setSettings(normalizedSettings);
+      setSavedSettings(normalizedSettings);
+      setErrors({});
+      setStatus({
+        type: "success",
+        message: data.message || "Settings saved successfully.",
+      });
     } catch (error) {
-      setStatus({ type: "error", message: "Failed to save settings." });
+      console.error("Save settings error:", error);
+
+      setStatus({
+        type: "error",
+        message: error.message || "Failed to save settings.",
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleReset = () => {
-    setSettings(defaultSettings);
-    setErrors({});
-    setStatus({
-      type: "success",
-      message: "Settings reset to default values.",
-    });
+  const handleReset = async () => {
+    try {
+      setResetting(true);
+      setStatus({ type: "", message: "" });
+
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`${API_BASE}/settings/reset`, {
+        method: "POST",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to reset settings.");
+      }
+
+      const normalizedSettings = {
+        ...defaultSettings,
+        ...data.data,
+        openingHours: {
+          ...defaultSettings.openingHours,
+          ...(data.data?.openingHours || {}),
+        },
+      };
+
+      setSettings(normalizedSettings);
+      setSavedSettings(normalizedSettings);
+      setErrors({});
+      setStatus({
+        type: "success",
+        message: data.message || "Settings reset to default values.",
+      });
+    } catch (error) {
+      console.error("Reset settings error:", error);
+
+      setStatus({
+        type: "error",
+        message: error.message || "Failed to reset settings.",
+      });
+    } finally {
+      setResetting(false);
+    }
   };
 
   if (loading) {
@@ -171,12 +291,14 @@ export default function Settings() {
                 Unsaved changes
               </span>
             )}
+
             <button
               type="button"
               onClick={handleReset}
-              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm transition hover:bg-white/10"
+              disabled={resetting}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Reset
+              {resetting ? "Resetting..." : "Reset"}
             </button>
           </div>
         </div>
@@ -403,10 +525,10 @@ export default function Settings() {
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={!hasChanges}
+              disabled={!hasChanges || saving}
               className="rounded-2xl bg-[#d8b46a] px-6 py-3 font-medium text-black transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Änderungen speichern
+              {saving ? "Speichern..." : "Änderungen speichern"}
             </button>
           </div>
         </form>
