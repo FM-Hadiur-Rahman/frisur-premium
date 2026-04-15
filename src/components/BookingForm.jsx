@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
-import { format } from "date-fns";
+import { format, startOfToday } from "date-fns";
 import toast from "react-hot-toast";
 
 const API_BASE =
@@ -11,16 +11,17 @@ export default function BookingForm() {
   const [selectedDate, setSelectedDate] = useState();
   const [services, setServices] = useState([]);
   const [coupons, setCoupons] = useState([]);
+  const [bookedSlots, setBookedSlots] = useState([]);
   const [loadingServices, setLoadingServices] = useState(true);
   const [loadingCoupons, setLoadingCoupons] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [bookedSlots, setBookedSlots] = useState([]);
   const [loadingBookedSlots, setLoadingBookedSlots] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
     contact: "",
     serviceId: "",
+    employeeId: "",
     time: "",
     message: "",
     couponCode: "",
@@ -28,6 +29,23 @@ export default function BookingForm() {
 
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponMessage, setCouponMessage] = useState("");
+
+  const allTimeSlots = [
+    "09:00",
+    "09:30",
+    "10:00",
+    "10:30",
+    "11:00",
+    "11:30",
+    "12:00",
+    "14:00",
+    "14:30",
+    "15:00",
+    "15:30",
+    "16:00",
+    "16:30",
+    "17:00",
+  ];
 
   useEffect(() => {
     async function fetchServices() {
@@ -44,7 +62,9 @@ export default function BookingForm() {
         setServices(data.data || []);
       } catch (error) {
         console.error("Services load error:", error);
-        toast.error("Leistungen konnten nicht geladen werden.");
+        toast.error("Leistungen konnten nicht geladen werden.", {
+          id: "services-load",
+        });
       } finally {
         setLoadingServices(false);
       }
@@ -64,7 +84,9 @@ export default function BookingForm() {
         setCoupons(data.data || []);
       } catch (error) {
         console.error("Coupons load error:", error);
-        toast.error("Gutscheine konnten nicht geladen werden.");
+        toast.error("Gutscheine konnten nicht geladen werden.", {
+          id: "coupons-load",
+        });
       } finally {
         setLoadingCoupons(false);
       }
@@ -74,78 +96,11 @@ export default function BookingForm() {
     fetchCoupons();
   }, []);
 
-  const bookedDates = useMemo(
-    () => [
-      new Date(2026, 3, 14),
-      new Date(2026, 3, 16),
-      new Date(2026, 3, 18),
-      new Date(2026, 3, 21),
-    ],
-    [],
-  );
-
-  const allTimeSlots = [
-    "09:00",
-    "09:30",
-    "10:00",
-    "10:30",
-    "11:00",
-    "11:30",
-    "12:00",
-    "14:00",
-    "14:30",
-    "15:00",
-    "15:30",
-    "16:00",
-    "16:30",
-    "17:00",
-  ];
-
-  const disabledDays = useMemo(() => {
-    return [{ before: new Date() }, ...bookedDates];
-  }, [bookedDates]);
+  const disabledDays = useMemo(() => [{ before: startOfToday() }], []);
 
   const formattedSelectedDate = selectedDate
     ? format(selectedDate, "yyyy-MM-dd")
     : null;
-
-  useEffect(() => {
-    async function fetchBookedSlots() {
-      if (!formattedSelectedDate) {
-        setBookedSlots([]);
-        return;
-      }
-
-      try {
-        setLoadingBookedSlots(true);
-
-        const res = await fetch(
-          `${API_BASE}/appointments/booked-slots?date=${encodeURIComponent(formattedSelectedDate)}`,
-        );
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(
-            data.message || "Gebuchte Uhrzeiten konnten nicht geladen werden.",
-          );
-        }
-
-        setBookedSlots(data.data || []);
-      } catch (error) {
-        console.error("Booked slots load error:", error);
-        toast.error("Gebuchte Uhrzeiten konnten nicht geladen werden.");
-        setBookedSlots([]);
-      } finally {
-        setLoadingBookedSlots(false);
-      }
-    }
-
-    fetchBookedSlots();
-  }, [formattedSelectedDate]);
-
-  const availableSlots = useMemo(() => {
-    return allTimeSlots.filter((slot) => !bookedSlots.includes(slot));
-  }, [bookedSlots]);
 
   const selectedService = useMemo(() => {
     return (
@@ -155,7 +110,12 @@ export default function BookingForm() {
     );
   }, [services, form.serviceId]);
 
+  const availableEmployees = selectedService?.employeeIds || [];
   const servicePrice = selectedService?.price || 0;
+
+  const availableSlots = useMemo(() => {
+    return allTimeSlots.filter((slot) => !bookedSlots.includes(slot));
+  }, [bookedSlots]);
 
   const discountAmount = useMemo(() => {
     if (!appliedCoupon || !servicePrice) return 0;
@@ -173,6 +133,48 @@ export default function BookingForm() {
 
   const finalPrice = Math.max(servicePrice - discountAmount, 0);
 
+  useEffect(() => {
+    async function fetchBookedSlots() {
+      if (!formattedSelectedDate || !form.serviceId) {
+        setBookedSlots([]);
+        return;
+      }
+
+      try {
+        setLoadingBookedSlots(true);
+
+        let url = `${API_BASE}/appointments/booked-slots?date=${encodeURIComponent(
+          formattedSelectedDate,
+        )}&serviceId=${encodeURIComponent(form.serviceId)}`;
+
+        if (form.employeeId) {
+          url += `&employeeId=${encodeURIComponent(form.employeeId)}`;
+        }
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(
+            data.message || "Gebuchte Uhrzeiten konnten nicht geladen werden.",
+          );
+        }
+
+        setBookedSlots(data.data || []);
+      } catch (error) {
+        console.error("Booked slots load error:", error);
+        toast.error("Gebuchte Uhrzeiten konnten nicht geladen werden.", {
+          id: "booked-slots-load",
+        });
+        setBookedSlots([]);
+      } finally {
+        setLoadingBookedSlots(false);
+      }
+    }
+
+    fetchBookedSlots();
+  }, [formattedSelectedDate, form.serviceId, form.employeeId]);
+
   function handleChange(e) {
     const { name, value } = e.target;
 
@@ -180,6 +182,8 @@ export default function BookingForm() {
       setForm((prev) => ({
         ...prev,
         serviceId: value,
+        employeeId: "",
+        time: "",
         couponCode: "",
       }));
       setAppliedCoupon(null);
@@ -187,19 +191,37 @@ export default function BookingForm() {
       return;
     }
 
+    if (name === "employeeId") {
+      setForm((prev) => ({
+        ...prev,
+        employeeId: value,
+        time: "",
+      }));
+      return;
+    }
+
     if (name === "couponCode") {
-      setForm((prev) => ({ ...prev, couponCode: value }));
+      setForm((prev) => ({
+        ...prev,
+        couponCode: value,
+      }));
       setAppliedCoupon(null);
       setCouponMessage("");
       return;
     }
 
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   }
 
   function handleSelectDate(date) {
     setSelectedDate(date);
-    setForm((prev) => ({ ...prev, time: "" }));
+    setForm((prev) => ({
+      ...prev,
+      time: "",
+    }));
   }
 
   function handleApplyCoupon() {
@@ -245,7 +267,8 @@ export default function BookingForm() {
 
     if (
       foundCoupon.appliesToService &&
-      foundCoupon.appliesToService._id !== selectedService._id
+      foundCoupon.appliesToService._id &&
+      String(foundCoupon.appliesToService._id) !== String(selectedService._id)
     ) {
       setAppliedCoupon(null);
       setCouponMessage("Dieser Gutschein gilt nicht für diese Leistung.");
@@ -263,20 +286,45 @@ export default function BookingForm() {
   function handleRemoveCoupon() {
     setAppliedCoupon(null);
     setCouponMessage("Gutschein wurde entfernt.");
-    setForm((prev) => ({ ...prev, couponCode: "" }));
+    setForm((prev) => ({
+      ...prev,
+      couponCode: "",
+    }));
     toast.success("Gutschein wurde entfernt.");
+  }
+
+  async function refreshBookedSlots(serviceId, employeeId, date) {
+    if (!date || !serviceId) return;
+
+    try {
+      let url = `${API_BASE}/appointments/booked-slots?date=${encodeURIComponent(
+        date,
+      )}&serviceId=${encodeURIComponent(serviceId)}`;
+
+      if (employeeId) {
+        url += `&employeeId=${encodeURIComponent(employeeId)}`;
+      }
+
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || "Gebuchte Uhrzeiten konnten nicht geladen werden.",
+        );
+      }
+
+      setBookedSlots(data.data || []);
+    } catch (error) {
+      console.error("Booked slots refresh error:", error);
+    }
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
 
     if (!selectedDate) {
-      toast.error("Bitte wählen Sie zuerst ein freies Datum aus.");
-      return;
-    }
-
-    if (!form.time) {
-      toast.error("Bitte wählen Sie eine verfügbare Uhrzeit aus.");
+      toast.error("Bitte wählen Sie zuerst ein Datum aus.");
       return;
     }
 
@@ -285,15 +333,26 @@ export default function BookingForm() {
       return;
     }
 
+    if (!form.time) {
+      toast.error("Bitte wählen Sie eine Uhrzeit aus.");
+      return;
+    }
+
     const payload = {
       name: form.name,
       contact: form.contact,
       serviceId: form.serviceId,
-      date: format(selectedDate, "yyyy-MM-dd"),
+      employeeId: form.employeeId || "",
+      date: formattedSelectedDate,
       time: form.time,
       message: form.message,
       couponCode: appliedCoupon ? appliedCoupon.code : "",
     };
+
+    const submittedTime = form.time;
+    const submittedServiceId = form.serviceId;
+    const submittedEmployeeId = form.employeeId;
+    const submittedDate = formattedSelectedDate;
 
     try {
       setSubmitting(true);
@@ -309,27 +368,41 @@ export default function BookingForm() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(
-          data.message || "Terminanfrage konnte nicht gesendet werden.",
-        );
+        throw new Error(data.message || "Buchung fehlgeschlagen.");
       }
 
-      toast.success("Ihre Terminanfrage wurde erfolgreich gesendet.");
-
-      setBookedSlots((prev) =>
-        prev.includes(form.time) ? prev : [...prev, form.time],
-      );
+      toast.success("Termin erfolgreich gebucht.");
 
       setForm({
         name: "",
         contact: "",
         serviceId: "",
+        employeeId: "",
         time: "",
         message: "",
         couponCode: "",
       });
+
       setAppliedCoupon(null);
       setCouponMessage("");
+      setBookedSlots([]);
+
+      await refreshBookedSlots(
+        submittedServiceId,
+        submittedEmployeeId,
+        submittedDate,
+      );
+
+      setForm((prev) => ({
+        ...prev,
+        name: "",
+        contact: "",
+        serviceId: submittedServiceId,
+        employeeId: submittedEmployeeId,
+        time: "",
+        message: "",
+        couponCode: "",
+      }));
     } catch (error) {
       console.error("Appointment submit error:", error);
       toast.error(error.message || "Ein Fehler ist aufgetreten.");
@@ -351,8 +424,8 @@ export default function BookingForm() {
           Buchen Sie Ihren Wunschtermin
         </h2>
         <p className="mt-4 max-w-2xl text-[#cfbea2]">
-          Wählen Sie ein verfügbares Datum und eine freie Uhrzeit und senden Sie
-          Ihre Anfrage bequem online an unser Studio.
+          Wählen Sie eine Leistung, einen Mitarbeitenden und eine freie Uhrzeit
+          für Ihren gewünschten Termin.
         </p>
       </div>
 
@@ -398,7 +471,7 @@ export default function BookingForm() {
               <div className="mb-2 h-3 w-3 rounded-full bg-[#6f6254]" />
               <p className="text-sm font-medium text-[#fff2d2]">Belegt</p>
               <p className="mt-1 text-xs leading-5 text-[#c9bba5]">
-                Dieser Tag ist nicht verfügbar
+                Dieser Slot ist aktuell nicht frei
               </p>
             </div>
 
@@ -435,8 +508,8 @@ export default function BookingForm() {
               Persönliche Terminanfrage
             </h3>
             <p className="mt-2 text-sm leading-6 text-[#cfbea2]">
-              Tragen Sie Ihre Daten ein und wir melden uns schnellstmöglich bei
-              Ihnen zurück.
+              Wählen Sie Ihre gewünschte Leistung und auf Wunsch Ihre bevorzugte
+              Fachkraft.
             </p>
           </div>
 
@@ -489,24 +562,49 @@ export default function BookingForm() {
             </select>
 
             {selectedService ? (
-              <div className="rounded-2xl border border-[#c8ae72]/15 bg-[rgba(255,255,255,0.03)] p-4">
-                <p className="text-sm uppercase tracking-[0.2em] text-[#c8ae72]">
-                  Gewählte Leistung
-                </p>
-                <div className="mt-3 flex items-center justify-between gap-4">
-                  <div>
-                    <span className="block text-[#fff2d2]">
-                      {selectedService.name}
-                    </span>
-                    <span className="text-xs text-[#c9bba5]">
-                      {selectedService.durationMinutes} Minuten
+              <>
+                <select
+                  className="h-12 rounded-2xl border border-[#c8ae72]/18 bg-[rgba(255,255,255,0.03)] px-4 text-[#fff5df] outline-none"
+                  name="employeeId"
+                  value={form.employeeId}
+                  onChange={handleChange}
+                >
+                  <option value="" className="text-black">
+                    Beliebige verfügbare Fachkraft
+                  </option>
+
+                  {availableEmployees.map((employee) => (
+                    <option
+                      key={employee._id}
+                      value={employee._id}
+                      className="text-black"
+                    >
+                      {employee.name}
+                      {employee.role ? ` – ${employee.role}` : ""}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="rounded-2xl border border-[#c8ae72]/15 bg-[rgba(255,255,255,0.03)] p-4">
+                  <p className="text-sm uppercase tracking-[0.2em] text-[#c8ae72]">
+                    Gewählte Leistung
+                  </p>
+                  <div className="mt-3 flex items-center justify-between gap-4">
+                    <div>
+                      <span className="block text-[#fff2d2]">
+                        {selectedService.name}
+                      </span>
+                      <span className="text-xs text-[#c9bba5]">
+                        {selectedService.durationMinutes} Minuten ·{" "}
+                        {availableEmployees.length || 1} verfügbare Fachkräfte
+                      </span>
+                    </div>
+                    <span className="text-lg font-semibold text-[#f1ddb0]">
+                      {servicePrice.toFixed(2)} €
                     </span>
                   </div>
-                  <span className="text-lg font-semibold text-[#f1ddb0]">
-                    {servicePrice.toFixed(2)} €
-                  </span>
                 </div>
-              </div>
+              </>
             ) : null}
 
             <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
@@ -574,6 +672,10 @@ export default function BookingForm() {
                 <p className="text-sm text-[#cfbea2]">
                   Bitte wählen Sie zuerst ein Datum aus.
                 </p>
+              ) : !form.serviceId ? (
+                <p className="text-sm text-[#cfbea2]">
+                  Bitte wählen Sie zuerst eine Leistung aus.
+                </p>
               ) : loadingBookedSlots ? (
                 <p className="text-sm text-[#cfbea2]">
                   Uhrzeiten werden geladen...
@@ -602,7 +704,7 @@ export default function BookingForm() {
                     ))
                   ) : (
                     <p className="text-sm text-[#cfbea2]">
-                      Für dieses Datum sind keine Uhrzeiten mehr verfügbar.
+                      Für diese Auswahl sind keine Uhrzeiten mehr verfügbar.
                     </p>
                   )}
                 </div>
