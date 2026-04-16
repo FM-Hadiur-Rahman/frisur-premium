@@ -1,4 +1,8 @@
+import useSalonSettings from "../hooks/useSalonSettings";
+
 export default function ContactSection() {
+  const { settings } = useSalonSettings();
+
   return (
     <section
       id="kontakt"
@@ -21,23 +25,26 @@ export default function ContactSection() {
         <div className="space-y-4 text-[#eadcbe]">
           <div>
             <p className="text-sm text-[#c8ae72]">Address</p>
-            <p className="mt-1">Königsallee 25, 40212 Düsseldorf</p>
+            <p className="mt-1">{settings.address}</p>
           </div>
 
           <div>
             <p className="text-sm text-[#c8ae72]">Phone</p>
-            <p className="mt-1">+49 211 12345678</p>
+            <p className="mt-1">{settings.phone}</p>
           </div>
 
           <div>
             <p className="text-sm text-[#c8ae72]">Email</p>
-            <p className="mt-1">hello@maison-elegance.de</p>
+            <p className="mt-1">{settings.email}</p>
           </div>
 
           <div>
             <p className="text-sm text-[#c8ae72]">Opening Hours</p>
-            <p className="mt-1">Mon–Fri: 09:00 – 19:00</p>
-            <p>Sat: 10:00 – 17:00</p>
+            <p className="mt-1">
+              Mon–Fri: {settings.openingHours.monday} /{" "}
+              {settings.openingHours.friday}
+            </p>
+            <p>Sat: {settings.openingHours.saturday}</p>
           </div>
         </div>
       </div>
