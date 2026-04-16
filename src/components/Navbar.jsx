@@ -1,17 +1,21 @@
+import useSalonSettings from "../hooks/useSalonSettings";
+
 export default function Navbar() {
+  const { settings } = useSalonSettings();
+
   return (
     <header className="sticky top-0 z-40 border-b border-[#c8ae72]/15 bg-[#120d12]/70 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         <div>
           <p className="text-lg font-semibold tracking-[0.08em] text-[#fff3d7]">
-            Maison Élégance
+            {settings.salonName || "Maison Élégance"}
           </p>
-          <p className="text-xs tracking-[0.22em] text-[#c8ae72] uppercase">
-            Luxury Hair Lounge
+          <p className="text-xs uppercase tracking-[0.22em] text-[#c8ae72]">
+            {settings.tagline || "Luxury Hair Lounge"}
           </p>
         </div>
 
-        <nav className="hidden md:flex items-center gap-8 text-sm text-[#e7d9bd]">
+        <nav className="hidden items-center gap-8 text-sm text-[#e7d9bd] md:flex">
           <a href="#leistungen" className="transition hover:text-[#f6e7c1]">
             Leistungen
           </a>
